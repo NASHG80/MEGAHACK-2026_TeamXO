@@ -166,13 +166,121 @@ const getMyRegistrations = async (req, res) => {
 };
 
 /* ─────────────────────────────────────────────────────────────
+   GET /api/registrations/my-shortlist-status
+   Returns shortlist status for the logged-in student across all
+   published hackathons they registered for (as leader OR member).
+───────────────────────────────────────────────────────────── */
+const getMyShortlistStatus = async (req, res) => {
+  try {
+    const email = (req.user?.email || '').toLowerCase().trim();
+    if (!email) return res.status(401).json({ success: false, message: 'Not authenticated' });
+
+    // Find registrations where this student is leader
+    const asLeader = await Registration.find({
+      leaderEmail: { $regex: new RegExp(`^${email}$`, 'i') },
+    }).populate('hackathon', 'title slug resultsPublished').lean();
+
+    // Find registrations where this student is a team member
+    const asMember = await Registration.find({
+      'teamMembers.email': { $regex: new RegExp(`^${email}$`, 'i') },
+    }).populate('hackathon', 'title slug resultsPublished').lean();
+
+    // Also check via Team model (for members joined via code)
+    let asTeamModelMember = [];
+    const User   = require('../models/User');
+    const { Team } = require('../models/Team');
+    const userDoc = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }).select('_id').lean();
+    if (userDoc) {
+      const teamDocs = await Team.find({ members: userDoc._id }).lean();
+      for (const t of teamDocs) {
+        const reg = await Registration.findOne({
+          hackathon: t.hackathonId,
+          leaderEmail: { $regex: new RegExp(`^${t.leaderEmail}$`, 'i') },
+        }).populate('hackathon', 'title slug resultsPublished').lean();
+        if (reg) asTeamModelMember.push(reg);
+      }
+    }
+
+    // Merge all, deduplicate by _id
+    const allRegs = [...asLeader, ...asMember, ...asTeamModelMember];
+    const seen = new Set();
+    const unique = allRegs.filter(r => {
+      const id = r._id.toString();
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    // Find any published + shortlisted registration
+    const shortlistedPublished = unique.find(
+      r => r.shortlisted && r.hackathon?.resultsPublished === true
+    );
+
+    if (shortlistedPublished) {
+      return res.json({
+        success: true,
+        shortlisted: true,
+        published: true,
+        hackathon: shortlistedPublished.hackathon,
+        registration: { teamName: shortlistedPublished.teamName, _id: shortlistedPublished._id },
+      });
+    }
+
+    // Check if any hackathon published results but student not shortlisted
+    const publishedButNotShortlisted = unique.find(r => r.hackathon?.resultsPublished === true && !r.shortlisted);
+    if (publishedButNotShortlisted) {
+      return res.json({ success: true, shortlisted: false, published: true });
+    }
+
+    // No published results yet
+    return res.json({ success: true, shortlisted: false, published: false });
+  } catch (error) {
+    console.error('[getMyShortlistStatus]', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────
    GET /api/registrations/check/:hackathonId/:email
    Returns whether an email is already registered for a hackathon.
 ───────────────────────────────────────────────────────────── */
 const checkRegistration = async (req, res) => {
   try {
     const { hackathonId, email } = req.params;
-    const reg = await Registration.findOne({ hackathon: hackathonId, leaderEmail: email });
+    const decodedEmail = decodeURIComponent(email).toLowerCase().trim();
+
+    // Check if this email is a team leader for this hackathon
+    let reg = await Registration.findOne({
+      hackathon: hackathonId,
+      leaderEmail: { $regex: new RegExp(`^${decodedEmail}$`, 'i') },
+    });
+
+    // If not a leader, check if they are a team member
+    if (!reg) {
+      reg = await Registration.findOne({
+        hackathon: hackathonId,
+        'teamMembers.email': { $regex: new RegExp(`^${decodedEmail}$`, 'i') },
+      });
+    }
+
+    // Also cross-reference Team model for members joined via code (may not be in Registration.teamMembers yet)
+    if (!reg) {
+      const { Team } = require('../models/Team');
+      const User = require('../models/User');
+      // Find the User document for this email
+      const userDoc = await User.findOne({ email: { $regex: new RegExp(`^${decodedEmail}$`, 'i') } }).select('_id').lean();
+      if (userDoc) {
+        // Find a team (for this hackathon) where this user is a member
+        const teamDoc = await Team.findOne({ hackathonId, members: userDoc._id }).lean();
+        if (teamDoc?.leaderEmail) {
+          reg = await Registration.findOne({
+            hackathon: hackathonId,
+            leaderEmail: { $regex: new RegExp(`^${teamDoc.leaderEmail}$`, 'i') },
+          });
+        }
+      }
+    }
+
     res.status(200).json({ success: true, registered: !!reg, data: reg || null });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -239,21 +347,21 @@ const deleteRegistration = async (req, res) => {
 ───────────────────────────────────────────────────────────── */
 const sendShortlistEmails = async (req, res) => {
   try {
-    const { hackathonId } = req.params;
+    const id = req.params.hackathonId;
 
-    // Fetch shortlisted registrations + hackathon name in parallel
-    const [shortlisted, hackathon] = await Promise.all([
-      Registration.find({ hackathon: hackathonId, shortlisted: true }),
-      Hackathon.findById(hackathonId).select('title organizerContact'),
-    ]);
+    // Resolve hackathon by ObjectId OR slug
+    let hackathon = null;
+    if (id.match(/^[a-f\d]{24}$/i)) hackathon = await Hackathon.findById(id).select('title organizerContact _id');
+    if (!hackathon) hackathon = await Hackathon.findOne({ slug: id }).select('title organizerContact _id').lean();
+    if (!hackathon) return res.status(404).json({ success: false, message: 'Hackathon not found.' });
 
+    const shortlisted = await Registration.find({ hackathon: hackathon._id, shortlisted: true });
     if (!shortlisted.length) {
       return res.status(400).json({ success: false, message: 'No shortlisted teams found.' });
     }
 
-    const hackathonName = hackathon?.title || 'the Hackathon';
+    const hackathonName = hackathon.title || 'the Hackathon';
 
-    // Build and send each email
     await Promise.all(
       shortlisted.map(reg => {
         const html = `
@@ -318,11 +426,14 @@ const sendShortlistEmails = async (req, res) => {
 ───────────────────────────────────────────────────────────── */
 const publishResults = async (req, res) => {
   try {
-    const hackathon = await Hackathon.findByIdAndUpdate(
-      req.params.hackathonId,
-      { resultsPublished: true },
-      { new: true }
-    );
+    const id = req.params.hackathonId;
+    // Resolve hackathon by ObjectId OR slug
+    let hackathon = null;
+    if (id.match(/^[a-f\d]{24}$/i)) hackathon = await Hackathon.findByIdAndUpdate(id, { resultsPublished: true }, { new: true });
+    if (!hackathon) {
+      const found = await Hackathon.findOne({ slug: id });
+      if (found) hackathon = await Hackathon.findByIdAndUpdate(found._id, { resultsPublished: true }, { new: true });
+    }
     if (!hackathon) {
       return res.status(404).json({ success: false, message: 'Hackathon not found.' });
     }
@@ -332,4 +443,4 @@ const publishResults = async (req, res) => {
   }
 };
 
-module.exports = { registerTeam, registerWithResume, getRegistrations, getAllRegistrations, getMyRegistrations, checkRegistration, shortlistRegistration, deleteRegistration, rescoreRegistration, sendShortlistEmails, publishResults };
+module.exports = { registerTeam, registerWithResume, getRegistrations, getAllRegistrations, getMyRegistrations, checkRegistration, getMyShortlistStatus, shortlistRegistration, deleteRegistration, rescoreRegistration, sendShortlistEmails, publishResults };
