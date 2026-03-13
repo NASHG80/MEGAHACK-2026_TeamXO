@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, PlusCircle, ClipboardList, FileText,
-  CalendarCheck, Award, ChevronRight, ChevronLeft, Zap,
-  UserCircle, Users2, X, Menu,
+  CalendarCheck, Award, ChevronRight, ChevronLeft, Zap, UserCircle, Users2, Menu, X,
 } from 'lucide-react';
 
 const NAV = [
@@ -37,11 +36,22 @@ function useIsMobile() {
  */
 export default function OrganizerSidebar({ open: openProp, onToggle: onToggleProp }) {
   const [internalOpen, setInternalOpen] = useState(true);
+  const [mobileOpen, setMobileOpen]     = useState(false);
+
   const open     = openProp     !== undefined ? openProp     : internalOpen;
   const onToggle = onToggleProp !== undefined ? onToggleProp : () => setInternalOpen(o => !o);
 
   const isMobile = useIsMobile();
   const { pathname } = useLocation();
+
+  // Close mobile drawer on route change
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileOpen]);
 
   /* Close drawer on route change (mobile) */
   useEffect(() => {

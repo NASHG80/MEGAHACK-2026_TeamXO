@@ -183,7 +183,7 @@ export default function OrganizerProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F7FB] font-sans">
+    <div className="min-h-screen bg-[#F5F7FB] font-sans overflow-x-hidden">
       <style>{`@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}`}</style>
       <OrganizerSidebar open={sbOpen} onToggle={() => setSbOpen(s => !s)} />
       <Toast t={toast} type={toastType} />
@@ -191,7 +191,7 @@ export default function OrganizerProfile() {
       <div className={`transition-all duration-300 ${sbOpen ? 'lg:pl-60' : 'lg:pl-16'}`}>
 
         {/* ── TOP NAVBAR ── */}
-        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-6">
+        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 pl-14 lg:pl-6">
           <div className="flex items-center gap-2 text-sm">
             <Link to="/organizer-dashboard" className="text-gray-400 hover:text-royal transition-colors">Dashboard</Link>
             <ChevronRight size={13} className="text-gray-300" />
@@ -202,41 +202,43 @@ export default function OrganizerProfile() {
           </span>
         </div>
 
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <main className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6">
 
           {/* ── PAGE HEADER ── */}
           <div className="rounded-2xl mb-6 overflow-hidden border border-gray-100 shadow-[0_2px_16px_rgba(30,100,255,0.07)]">
             <div className="h-1.5 bg-gradient-to-r from-royal via-blue-500 to-violet-500" />
-            <div className="bg-white px-6 py-5 flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <h1 className="text-2xl font-extrabold text-dark tracking-tight">Profile & Verification</h1>
-                <p className="text-sm text-gray-400 mt-1">Complete your profile and submit for verification to start creating hackathons.</p>
+            <div className="bg-white px-4 sm:px-6 py-5">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-dark tracking-tight">Profile &amp; Verification</h1>
+                  <p className="text-sm text-gray-400 mt-1">Complete your profile and submit for verification to start creating hackathons.</p>
+                </div>
+                {status === 'unverified' && (
+                  <div className="flex items-start sm:items-center gap-2 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl sm:self-center sm:shrink-0">
+                    <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
+                    <p className="text-xs font-semibold text-amber-700">Verification required to create hackathons</p>
+                  </div>
+                )}
+                {status === 'rejected' && verification?.rejectionReason && (
+                  <div className="flex items-start sm:items-center gap-2 px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-xl sm:self-center sm:shrink-0">
+                    <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5 sm:mt-0" />
+                    <p className="text-xs font-semibold text-red-700">Rejected: {verification.rejectionReason}</p>
+                  </div>
+                )}
               </div>
-              {status === 'unverified' && (
-                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-xl self-center">
-                  <AlertCircle size={14} className="text-amber-500 shrink-0" />
-                  <p className="text-xs font-semibold text-amber-700">Verification required to create hackathons</p>
-                </div>
-              )}
-              {status === 'rejected' && verification?.rejectionReason && (
-                <div className="flex items-center gap-2 px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-xl self-center">
-                  <AlertCircle size={14} className="text-red-500 shrink-0" />
-                  <p className="text-xs font-semibold text-red-700">Rejected: {verification.rejectionReason}</p>
-                </div>
-              )}
             </div>
           </div>
 
           {/* ── STEPS ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-5 mb-6">
-            <div className="flex items-center justify-between flex-wrap gap-y-4">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-4 sm:p-5 mb-6">
+            <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-3 sm:gap-0">
               {steps.map((s, i) => (
                 <div key={s.label} className="flex items-center gap-2">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${s.done ? 'bg-royal text-white' : 'bg-gray-100 text-gray-400'}`}>
                     {s.done ? <CheckCircle2 size={14} /> : i + 1}
                   </div>
-                  <span className={`text-sm font-medium whitespace-nowrap ${s.done ? 'text-dark' : 'text-gray-400'}`}>{s.label}</span>
-                  {i < steps.length - 1 && <div className="hidden sm:block w-12 h-px bg-gray-200 ml-2" />}
+                  <span className={`text-xs sm:text-sm font-medium leading-tight ${s.done ? 'text-dark' : 'text-gray-400'}`}>{s.label}</span>
+                  {i < steps.length - 1 && <div className="hidden sm:block w-8 lg:w-12 h-px bg-gray-200 ml-2 shrink-0" />}
                 </div>
               ))}
             </div>
@@ -302,9 +304,10 @@ export default function OrganizerProfile() {
             <div className="lg:col-span-2">
               <form onSubmit={handleSubmit}>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] overflow-hidden">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-100">
                     <h2 className="text-sm font-bold text-dark flex items-center gap-2">
-                      <ShieldCheck size={15} className="text-royal" />Organizer Verification Details
+                      <ShieldCheck size={15} className="text-royal shrink-0" />
+                      <span>Organizer Verification Details</span>
                     </h2>
                     {status !== 'unverified' && status !== 'rejected' && !editing && (
                       <button type="button" onClick={() => setEditing(true)}
@@ -314,7 +317,7 @@ export default function OrganizerProfile() {
                     )}
                   </div>
 
-                  <div className="p-6 space-y-5">
+                  <div className="p-4 sm:p-6 space-y-5">
                     <div className="grid sm:grid-cols-2 gap-5">
                       <Field label="Club / Organisation Name" required>
                         <input value={form.clubName} onChange={e => set('clubName', e.target.value)} disabled={!editing}
@@ -360,7 +363,7 @@ export default function OrganizerProfile() {
                       hint="ID card, official letter, or club certificate (PDF/JPG/PNG, max 5MB)">
                       {editing ? (
                         <div onClick={() => docRef.current.click()}
-                          className={`relative flex flex-col items-center justify-center gap-3 px-6 py-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all
+                          className={`relative flex flex-col items-center justify-center gap-3 px-4 sm:px-6 py-6 sm:py-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all
                             ${errors.doc ? 'border-red-300 bg-red-50' : docFile ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200 bg-gray-50 hover:border-royal hover:bg-royal/5'}`}>
                           <input ref={docRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleDocChange} />
                           {docFile ? (
@@ -404,7 +407,7 @@ export default function OrganizerProfile() {
                   </div>
 
                   {editing && (
-                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/40 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="px-4 sm:px-6 py-4 border-t border-gray-100 bg-gray-50/40 flex items-center justify-between gap-3 flex-wrap">
                       {status !== 'unverified' && (
                         <button type="button" onClick={() => setEditing(false)}
                           className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:border-gray-300 transition-colors cursor-pointer">

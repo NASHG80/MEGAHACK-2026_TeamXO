@@ -78,7 +78,7 @@ export default function EventQRScanner({ onScanSuccess, onClose }) {
 
     // Call backend
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('hf_token');
       const res = await fetch(`${API_BASE}/self-scan`, {
         method: 'POST',
         headers: {

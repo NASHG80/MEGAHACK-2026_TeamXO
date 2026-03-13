@@ -101,23 +101,23 @@ function HackHeader({ hack, showToast }) {
       {/* Gradient top strip */}
       <div className="h-1.5 bg-gradient-to-r from-royal via-blue-500 to-violet-500" />
 
-      <div className="bg-white px-6 py-5">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5 flex-wrap">
+      <div className="bg-white px-4 sm:px-6 py-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           {/* Left */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5 mb-2 flex-wrap">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <SBadge s={hack.status || 'Upcoming'} />
               <span className="text-xs text-gray-400 font-medium">ID: {hack.hackathonId || 'HF-001'}</span>
             </div>
-            <h1 className="text-2xl font-extrabold text-dark tracking-tight mb-3 truncate">{hack.title}</h1>
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-dark tracking-tight mb-3 break-words">{hack.title}</h1>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
               {[
                 [CalendarDays, `Deadline: ${hack.deadline}`,   'text-gray-500'],
                 [Trophy,       `Prize: ₹${hack.prize}`,        'text-amber-600'],
                 [Users,        `${hack.regCount || 0} Registered`,  'text-royal'],
                 [FileText,     `${hack.subCount || 0} Submissions`,  'text-violet-600'],
               ].map(([Icon, text, cls]) => (
-                <div key={text} className={`flex items-center gap-1.5 text-sm font-medium ${cls}`}>
+                <div key={text} className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium ${cls}`}>
                   <Icon size={13} className="shrink-0" />{text}
                 </div>
               ))}
@@ -125,7 +125,7 @@ function HackHeader({ hack, showToast }) {
           </div>
 
           {/* Right — quick actions */}
-          <div className="flex flex-wrap gap-2.5 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <Link to="/organizer/ppt-review"
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-royal rounded-xl hover:bg-blue-700 transition-all cursor-pointer shadow-sm shadow-royal/20">
               <ExternalLink size={12} /> PPT Review
@@ -403,7 +403,7 @@ function ParticipantsTab({ participants, setParticipants, showToast }) {
       {/* Detail drawer */}
       {drawer && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={() => setDrawer(null)}>
-          <div className="absolute right-0 top-0 bottom-0 w-80 bg-white shadow-2xl p-6 overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-white shadow-2xl p-6 overflow-y-auto" onClick={e => e.stopPropagation()}>
             <button onClick={() => setDrawer(null)} className="absolute top-4 right-4 text-gray-400 hover:text-dark cursor-pointer w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-sm">✕</button>
             <div className="text-center mb-6 pt-2">
               <div className="w-16 h-16 rounded-2xl text-white text-xl font-bold flex items-center justify-center mx-auto mb-3" style={{ background: avBg(drawer.leaderName || drawer.teamName) }}>{initials(drawer.leaderName || drawer.teamName || 'T')}</div>
@@ -550,7 +550,7 @@ function TeamsTab({ teams }) {
       {/* ── Team detail drawer ── */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="absolute right-0 top-0 bottom-0 w-96 bg-white shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-white shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Drawer header */}
             <div className="px-6 py-5 border-b border-gray-100 flex items-start justify-between">
               <div className="flex items-center gap-3">
@@ -660,7 +660,7 @@ function TeamsTab({ teams }) {
 
       {/* Grid view */}
       {view === 'grid' ? (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.length === 0 && <span className="text-sm text-gray-500 italic">No teams registered yet.</span>}
           {filtered.map((t, i) => (
             <div key={t.teamId || t._id}
@@ -763,7 +763,7 @@ function SettingsTab({ hack, showToast }) {
   };
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5">
       {/* Event controls */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
         <h3 className="text-sm font-bold text-dark mb-5">Event Controls</h3>
@@ -885,7 +885,7 @@ export default function ManageHackathon() {
 
       <div className={`transition-all duration-300 ${sbOpen ? 'lg:pl-60' : 'lg:pl-16'}`}>
         {/* Top navbar */}
-        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-6">
+        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 pl-14 lg:pl-6">
           <div className="flex items-center gap-2 text-sm">
             <Link to="/organizer-dashboard" className="text-gray-400 hover:text-royal transition-colors">Dashboard</Link>
             <ChevronRight size={13} className="text-gray-300" />
@@ -945,7 +945,7 @@ export default function ManageHackathon() {
               {/* Tab card */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] overflow-hidden">
                 <TabBar active={tab} set={setTab} />
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {tab === 'overview'  && <OverviewTab hack={hackData} activity={activities} showToast={showToast} hackathonId={hackData.hackathonId || hackathonSlug || hackData.slug} />}
                   {tab === 'teams'     && <TeamsTab teams={teams} />}
                   {tab === 'settings'  && <SettingsTab hack={hackData} showToast={showToast} />}

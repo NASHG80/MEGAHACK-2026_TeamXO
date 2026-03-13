@@ -162,7 +162,7 @@ function SubmissionsPane({ subs, setSubs, showToast, selected, setSelected, onTo
       </div>
 
       {/* Auto-shortlist banner */}
-      <div className="flex items-center gap-4 bg-gradient-to-r from-blue-50 to-violet-50 border border-blue-100 rounded-2xl px-5 py-3.5 mb-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-gradient-to-r from-blue-50 to-violet-50 border border-blue-100 rounded-2xl px-4 sm:px-5 py-3.5 mb-4">
         <div className="flex items-center gap-2.5 flex-1 min-w-[160px]">
           <Zap size={15} className="text-blue-600 shrink-0" />
           <p className="text-sm font-semibold text-slate-700">Auto-shortlist all teams scoring ≥</p>
@@ -184,11 +184,11 @@ function SubmissionsPane({ subs, setSubs, showToast, selected, setSelected, onTo
       <p className="text-xs font-medium text-slate-400 mb-3">{filtered.length} registrations · sorted by AI score</p>
 
       {/* Table header */}
-      <div className="grid grid-cols-[32px_1fr_90px_90px_90px] gap-3 px-4 mb-2">
+      <div className="grid grid-cols-[28px_1fr_70px_70px] sm:grid-cols-[32px_1fr_90px_90px_90px] gap-2 sm:gap-3 px-3 sm:px-4 mb-2">
         <div />
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Project / Team</p>
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">Score</p>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center hidden md:block">Status</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center hidden sm:block">Status</p>
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Action</p>
       </div>
 
@@ -205,7 +205,7 @@ function SubmissionsPane({ subs, setSubs, showToast, selected, setSelected, onTo
           const medal = rankMedal(i);
           return (
             <div key={s._id} onClick={() => setSelected(isSelected ? null : s)}
-              className={`grid grid-cols-[32px_1fr_90px_90px_90px] gap-3 items-center px-4 py-3.5 rounded-2xl border cursor-pointer transition-all duration-150
+              className={`grid grid-cols-[28px_1fr_70px_70px] sm:grid-cols-[32px_1fr_90px_90px_90px] gap-2 sm:gap-3 items-center px-3 sm:px-4 py-3.5 rounded-2xl border cursor-pointer transition-all duration-150
                 ${isSelected
                   ? 'bg-blue-600 border-blue-600 shadow-lg shadow-blue-200'
                   : s.shortlisted
@@ -483,7 +483,7 @@ export default function PptReview() {
       <div className={`transition-all duration-300 ${sbOpen ? 'lg:pl-60' : 'lg:pl-16'}`}>
 
         {/* ── TOP NAVBAR ── */}
-        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-6">
+        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 pl-14 lg:pl-6">
           <div className="flex items-center gap-2 text-sm">
             <Link to="/organizer-dashboard" className="text-gray-400 hover:text-royal transition-colors">Dashboard</Link>
             <ChevronRight size={13} className="text-gray-300" />
@@ -502,32 +502,34 @@ export default function PptReview() {
           {/* ── PAGE HEADER CARD ── */}
           <div className="rounded-2xl mb-6 overflow-hidden border border-gray-100 shadow-[0_2px_16px_rgba(30,100,255,0.07)]">
             <div className="h-1.5 bg-gradient-to-r from-royal via-blue-500 to-violet-500" />
-            <div className="bg-white px-6 py-5 flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <h1 className="text-2xl font-extrabold text-dark tracking-tight">PPT Review Panel</h1>
-                <p className="text-sm text-gray-400 mt-1">
-                  {activeHackathon ? <span className="font-semibold text-royal">{activeHackathon.title}</span> : 'AI-evaluated submissions'}
-                  {' '}· review scores and shortlist top teams
-                </p>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap self-center">
-                {hackathons.length > 1 && (
-                  <select
-                    value={activeHackathon?.slug || ''}
-                    onChange={e => {
-                      const h = hackathons.find(x => x.slug === e.target.value);
-                      if (h) setActiveHackathon(h);
-                    }}
-                    className="text-xs font-bold text-dark bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-royal/20"
-                  >
-                    {hackathons.map(h => <option key={h._id} value={h.slug}>{h.title}</option>)}
-                  </select>
-                )}
-                {slCount > 0 && (
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
-                    {slCount} team{slCount !== 1 ? 's' : ''} shortlisted
-                  </span>
-                )}
+            <div className="bg-white px-4 sm:px-6 py-5">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-dark tracking-tight break-words">PPT Review Panel</h1>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {activeHackathon ? <span className="font-semibold text-royal">{activeHackathon.title}</span> : 'AI-evaluated submissions'}
+                    {' '}· review scores and shortlist top teams
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap sm:shrink-0 sm:self-center">
+                  {hackathons.length > 1 && (
+                    <select
+                      value={activeHackathon?.slug || ''}
+                      onChange={e => {
+                        const h = hackathons.find(x => x.slug === e.target.value);
+                        if (h) setActiveHackathon(h);
+                      }}
+                      className="text-xs font-bold text-dark bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-royal/20 max-w-[180px] truncate"
+                    >
+                      {hackathons.map(h => <option key={h._id} value={h.slug}>{h.title}</option>)}
+                    </select>
+                  )}
+                  {slCount > 0 && (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full whitespace-nowrap">
+                      {slCount} team{slCount !== 1 ? 's' : ''} shortlisted
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -566,25 +568,39 @@ export default function PptReview() {
 
             {/* Tab content — two-pane for submissions */}
             {tab === 'submissions' ? (
-              <div className="flex" style={{ minHeight: '520px' }}>
-                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+              <div className="flex flex-col lg:flex-row" style={{ minHeight: '520px' }}>
+                {/* Submissions list */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-thin">
                   <SubmissionsPane
                     subs={subs} setSubs={setSubs} showToast={showToast}
                     selected={selected} setSelected={setSelected}
                     onToggleSl={toggleSl} />
                 </div>
-                <div className={`border-l border-gray-100 bg-gray-50/40 transition-all duration-300 overflow-y-auto scrollbar-thin flex-shrink-0
-                  ${selected ? 'w-[320px] xl:w-[360px]' : 'w-[260px]'}`}>
-                  <DetailPanel
-                    sub={selected}
-                    onClose={() => setSelected(null)}
-                    onToggleSl={toggleSl}
-                    showToast={showToast}
-                    notes={notes} setNotes={setNotes} />
-                </div>
+                {/* Detail panel — full-width on mobile, fixed sidebar on lg+ */}
+                {selected && (
+                  <div className="border-t lg:border-t-0 lg:border-l border-gray-100 bg-gray-50/40 overflow-y-auto scrollbar-thin lg:w-[320px] xl:w-[360px] lg:shrink-0">
+                    <DetailPanel
+                      sub={selected}
+                      onClose={() => setSelected(null)}
+                      onToggleSl={toggleSl}
+                      showToast={showToast}
+                      notes={notes} setNotes={setNotes} />
+                  </div>
+                )}
+                {/* Placeholder panel — only on lg+ when nothing is selected */}
+                {!selected && (
+                  <div className="hidden lg:block border-l border-gray-100 bg-gray-50/40 overflow-y-auto scrollbar-thin w-[260px] shrink-0">
+                    <DetailPanel
+                      sub={null}
+                      onClose={() => {}}
+                      onToggleSl={toggleSl}
+                      showToast={showToast}
+                      notes={notes} setNotes={setNotes} />
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 <ShortlistPane subs={subs} showToast={showToast} hackathonId={activeHackathon?.slug || activeHackathon?._id} />
               </div>
             )}

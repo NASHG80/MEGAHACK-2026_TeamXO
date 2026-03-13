@@ -3,6 +3,8 @@ const Hackathon    = require('../models/Hackathon');
 const HelpRequest  = require('../models/HelpRequest');
 const User         = require('../models/User');
 const TreasureHunt = require('../models/TreasureHunt');
+const EventTeam    = require('../models/EventTeam');
+const Registration = require('../models/Registration');
 const crypto       = require('crypto');
 
 /* ───────────────────────────────────────────
@@ -11,12 +13,62 @@ const crypto       = require('crypto');
    ─────────────────────────────────────────── */
 exports.getMyLiveEvent = async (req, res) => {
   try {
+    const EventWorkspace = require('../models/EventWorkspace');
+
     const event = await LiveEvent.findOne({ student: req.user.id })
-      .populate('hackathon', 'title organizerName venue date time status')
+      .populate('hackathon', 'title organizerName venue date time status slug timeline')
       .populate('student', 'name email');
 
     if (!event) {
       return res.status(404).json({ message: 'No live event found for this student' });
+    }
+
+    // ── Look up the organizer-assigned workspace from EventWorkspace ──────
+    // EventWorkspace.hackathonId = slug string (not ObjectId), so we skip
+    // hackathon filtering and query directly by the globally-unique teamId.
+    let workspaceNumber   = event.workspaceNumber;
+    let workspaceLocation = event.workspaceLocation;
+
+    try {
+      const hackathonId  = event.hackathon._id;
+      const studentEmail = event.student.email;
+
+      // 1. Find the student's registration → derive their REG-{id} teamId
+      const reg = await Registration.findOne({
+        hackathon: hackathonId,
+        $or: [
+          { leaderEmail:         studentEmail },
+          { 'teamMembers.email': studentEmail },
+        ],
+      }).select('_id').lean();
+
+      if (reg) {
+        const teamId = `REG-${reg._id}`;
+
+        // 2. Find the workspace this team is assigned to — query by teamId directly
+        //    (EventWorkspace.hackathonId is a slug string; avoid that mismatch entirely)
+        const ws = await EventWorkspace.findOne({
+          'assignedTeams.teamId': teamId,
+        }).lean();
+
+        if (ws) {
+          const assignment = ws.assignedTeams.find(t => t.teamId === teamId);
+          const slotLabel  = assignment?.slots?.length
+            ? assignment.slots.map(s => `WS-${String(s + 1).padStart(2, '0')}`).join(', ')
+            : '';
+          workspaceNumber   = slotLabel ? `${ws.number} · ${slotLabel}` : ws.number;
+          workspaceLocation = ws.floor + (ws.note ? ` · ${ws.note}` : '');
+
+          // 3. Always persist back to LiveEvent so non-API paths (e.g. fallback FALLBACK_EVENT) also update
+          await LiveEvent.updateOne(
+            { _id: event._id },
+            { $set: { workspaceNumber, workspaceLocation } }
+          );
+        }
+      }
+    } catch (wsErr) {
+      console.warn('[getMyLiveEvent] Could not resolve workspace:', wsErr.message);
+      // Non-fatal — student still gets whatever is in LiveEvent
     }
 
     res.json({
@@ -28,8 +80,8 @@ exports.getMyLiveEvent = async (req, res) => {
       venue:             event.hackathon.venue,
       date:              event.hackathon.date,
       time:              event.hackathon.time,
-      workspaceNumber:   event.workspaceNumber,
-      workspaceLocation: event.workspaceLocation,
+      workspaceNumber,
+      workspaceLocation,
       entryStatus:       event.entryStatus,
       lunchStatus:       event.lunchStatus,
       dinnerStatus:      event.dinnerStatus,
@@ -37,6 +89,7 @@ exports.getMyLiveEvent = async (req, res) => {
       mealsQR:           event.mealsQR,
       hackathonStatus:   event.hackathon.status,
       feedbackSubmitted: event.feedbackSubmitted,
+      timeline:          event.hackathon.timeline || [],
     });
   } catch (err) {
     console.error('getMyLiveEvent error:', err);
@@ -130,9 +183,17 @@ exports.selfScan = async (req, res) => {
       });
     }
 
+    // Resolve hackathon by ObjectId OR by slug/string id
+    const mongoose = require('mongoose');
+    let resolvedHackathonId = hackathonId;
+    if (!mongoose.Types.ObjectId.isValid(hackathonId)) {
+      const hack = await Hackathon.findOne({ slug: hackathonId }).select('_id').lean();
+      if (hack) resolvedHackathonId = hack._id;
+    }
+
     const event = await LiveEvent.findOne({
       student:   req.user.id,
-      hackathon: hackathonId,
+      hackathon: resolvedHackathonId,
     });
 
     if (!event) {
@@ -145,13 +206,13 @@ exports.selfScan = async (req, res) => {
 
     // Duplicate scan prevention
     if (action === 'entry' && event.entryStatus === 'Entered') {
-      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'Entry has already been recorded for you.', entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
+      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'Entry has already been recorded for you.', entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus, workspaceNumber: event.workspaceNumber, workspaceLocation: event.workspaceLocation });
     }
     if (action === 'lunch' && event.lunchStatus === 'Claimed') {
-      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'You have already claimed lunch.',           entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
+      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'You have already claimed lunch.', entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
     }
     if (action === 'dinner' && event.dinnerStatus === 'Claimed') {
-      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'You have already claimed dinner.',          entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
+      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'You have already claimed dinner.', entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
     }
 
     const successMessages = {
@@ -166,13 +227,82 @@ exports.selfScan = async (req, res) => {
 
     await event.save();
 
+    // ── When student scans the ENTRY gate QR, mark the EventTeam as entered
+    //    so EventManagement's TeamEntryPanel (polls every 15s) shows them as entered.
+    if (action === 'entry') {
+      (async () => {
+        try {
+          const studentUser = await User.findById(req.user.id).select('name email').lean();
+          const studentEmail = studentUser?.email || '';
+          const studentName  = studentUser?.name  || '';
+
+          // Find registration to get stable team id (REG-{registration._id})
+          const reg = await Registration.findOne({
+            hackathon: resolvedHackathonId,
+            $or: [
+              { leaderEmail: studentEmail },
+              { 'teamMembers.email': studentEmail },
+            ],
+          }).select('_id teamName leaderName teamMembers college').lean();
+
+          if (reg) {
+            const teamId = `REG-${reg._id}`;
+            const now    = new Date();
+            const h      = now.getHours();
+            const m      = String(now.getMinutes()).padStart(2, '0');
+            const entryTime = `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
+            const memberNames = [reg.leaderName, ...(reg.teamMembers || []).map(mb => mb.name || mb.email || '')].filter(Boolean);
+
+            const existingTeam = await EventTeam.findOne({
+              hackathonId: resolvedHackathonId.toString(),
+              teamId,
+            });
+
+            if (existingTeam) {
+              if (!existingTeam.entered) {
+                existingTeam.entered   = true;
+                existingTeam.entryTime = entryTime;
+              }
+              // Mark scanning student present
+              if (studentName) {
+                if (!(existingTeam.memberStatus instanceof Map)) {
+                  existingTeam.memberStatus = new Map(Object.entries(existingTeam.memberStatus || {}));
+                }
+                existingTeam.memberStatus.set(studentName, 'present');
+              }
+              await existingTeam.save();
+            } else {
+              // Lazily create the EventTeam record (real registrations may not have been seeded)
+              const memberStatus = {};
+              if (studentName) memberStatus[studentName] = 'present';
+              await EventTeam.create({
+                hackathonId: resolvedHackathonId.toString(),
+                teamId,
+                name:         reg.teamName || 'Unknown Team',
+                college:      reg.college  || '',
+                members:      memberNames.length,
+                entered:      true,
+                entryTime,
+                memberNames,
+                memberStatus,
+              }).catch(() => {}); // ignore duplicate-key races
+            }
+          }
+        } catch (teamErr) {
+          console.warn('[selfScan] Could not update EventTeam:', teamErr.message);
+        }
+      })(); // fire-and-forget — don't block the student's response
+    }
+
     res.json({
-      success:      true,
+      success:           true,
       action,
-      message:      successMessages[action],
-      entryStatus:  event.entryStatus,
-      lunchStatus:  event.lunchStatus,
-      dinnerStatus: event.dinnerStatus,
+      message:           successMessages[action],
+      entryStatus:       event.entryStatus,
+      lunchStatus:       event.lunchStatus,
+      dinnerStatus:      event.dinnerStatus,
+      workspaceNumber:   event.workspaceNumber   || null,
+      workspaceLocation: event.workspaceLocation || null,
     });
   } catch (err) {
     console.error('selfScan error:', err);
