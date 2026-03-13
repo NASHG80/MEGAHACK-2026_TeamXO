@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Settings, ChevronRight, Users, Star, Award,
-  Search, Download, Copy, Mail, Trash2, Eye, BarChart2, ClipboardList,
+  Search, Download, Trash2, Eye, BarChart2, ClipboardList,
   ToggleLeft, ToggleRight, AlertTriangle, CheckCircle2, ExternalLink,
   CalendarDays, Trophy, Zap, Grid3X3, List, TrendingUp, Clock, ArrowUpRight,
   Plus, Pencil, MapPin, X,
@@ -127,14 +127,6 @@ function HackHeader({ hack, showToast }) {
 
           {/* Right — quick actions */}
           <div className="flex flex-wrap gap-2.5 shrink-0">
-            <button onClick={() => { navigator.clipboard?.writeText(hack.regLink || ''); showToast('Registration link copied!'); }}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-royal border border-royal/20 bg-royal/5 rounded-xl hover:bg-royal/10 transition-all cursor-pointer">
-              <Copy size={12} /> Copy Link
-            </button>
-            <button onClick={() => showToast('Email composer opened')}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-xl hover:border-royal/40 hover:text-royal transition-all cursor-pointer">
-              <Mail size={12} /> Announce
-            </button>
             <Link to="/organizer/ppt-review"
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-royal rounded-xl hover:bg-blue-700 transition-all cursor-pointer shadow-sm shadow-royal/20">
               <ExternalLink size={12} /> PPT Review
