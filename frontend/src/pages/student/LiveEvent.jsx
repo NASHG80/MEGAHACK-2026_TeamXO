@@ -5,6 +5,7 @@ import {
   Wifi, Battery, Coffee, Sparkles, Navigation, Users, Shield,
   ScanLine, CircleDot, HelpCircle, X, Send, Paperclip,
   Megaphone, Wrench, Ticket, MessageSquare, Loader2, AlertTriangle,
+  Trophy, Timer, Gift, Star, PackageCheck, Zap, ChevronRight,
 } from 'lucide-react';
 import StudentNavbar from '../../components/StudentNavbar';
 import EventQRScanner from '../../components/EventQRScanner';
@@ -356,6 +357,123 @@ export default function LiveEvent() {
       }
     } catch { /* silent */ }
     setConfirming(null);
+  };
+
+  /* ─── Chill Out Zone / Treasure Hunt state ──────────────────────── */
+  const TREASURE_HUNT_QUESTIONS = [
+    { q: 'Find the tallest plant or tree on this floor and take a photo next to it 🌿', timeMins: 7 },
+    { q: 'Get a signature from 3 different hackathon volunteers on any piece of paper 📝', timeMins: 10 },
+    { q: 'Find a team whose name starts with the letter \'A\' or \'B\' and get a selfie with them 🤝', timeMins: 8 },
+    { q: 'Locate the nearest fire exit and photo it. Then name the color of the emergency sign 🛑', timeMins: 5 },
+    { q: 'Count the total number of whiteboards or flip-charts in the venue and report the number 📊', timeMins: 8 },
+    { q: 'Find a mentor badge wearer and ask them one technical question about their domain 💡', timeMins: 10 },
+    { q: 'Locate the nearest water refill station and bring back a full water bottle to show CoCom 💧', timeMins: 6 },
+    { q: 'Find a team hacking with Python AND another team hacking with JavaScript 🐍', timeMins: 9 },
+    { q: 'Take a boomerang-style video near the event banner and show it to CoCom 📹', timeMins: 7 },
+    { q: 'Find 2 organizers wearing the same color t-shirt and get a group photo 👕', timeMins: 8 },
+    { q: 'Collect business cards (physical or digital) from 2 different sponsors \' booths 💼', timeMins: 10 },
+    { q: 'Find the snack station and name 3 items currently available (show CoCom a photo) 🍰', timeMins: 5 },
+  ];
+  const [chillOpen, setChillOpen]               = useState(false);
+  const [huntTask, setHuntTask]                 = useState(null);   // active task from backend
+  const [huntLoading, setHuntLoading]           = useState(true);
+  const [huntStarting, setHuntStarting]         = useState(false);
+  const [huntTimer, setHuntTimer]               = useState(0);      // seconds remaining
+  const [goodiesModal, setGoodiesModal]         = useState(null);   // reward text or null
+  const [selectedQ, setSelectedQ]               = useState(null);   // chosen question index
+
+  /* Fetch current treasure-hunt status on mount */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/gamification/status`, { headers: getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.task) setHuntTask(data.task);
+        }
+      } catch { /* silent */ } finally { setHuntLoading(false); }
+    })();
+  }, []);
+
+  /* Countdown timer for active task */
+  useEffect(() => {
+    if (!huntTask || huntTask.status !== 'in_progress') return;
+    const computeRemaining = () => {
+      const elapsedMs = Date.now() - new Date(huntTask.startTime).getTime();
+      return Math.max(0, Math.round((huntTask.timeLimitMinutes * 60 * 1000 - elapsedMs) / 1000));
+    };
+    setHuntTimer(computeRemaining());
+    const id = setInterval(() => setHuntTimer(computeRemaining()), 1000);
+    return () => clearInterval(id);
+  }, [huntTask]);
+
+  /* Poll task status every 8 sec to catch CoComm acceptance */
+  useEffect(() => {
+    if (!huntTask || huntTask.status !== 'in_progress') return;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/gamification/status`, { headers: getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.task?.status === 'completed' && huntTask.status !== 'completed') {
+            setHuntTask(data.task);
+            setGoodiesModal(data.task.goodiesReward);
+          } else if (data.task?.status === 'expired') {
+            setHuntTask(data.task);
+          }
+        }
+      } catch { /* silent */ }
+    }, 8000);
+    return () => clearInterval(id);
+  }, [huntTask]);
+
+  const startHunt = async (qIdx) => {
+    const q = TREASURE_HUNT_QUESTIONS[qIdx];
+    setHuntStarting(true);
+    try {
+      const res = await fetch(`${API_BASE}/gamification/start`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          questionText:     q.q,
+          questionIndex:    qIdx,
+          timeLimitMinutes: q.timeMins,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHuntTask(data.task);
+      } else {
+        // Fallback: create a local task so UI still works
+        setHuntTask({
+          _id: 'local-' + Date.now(),
+          questionText:     q.q,
+          questionIndex:    qIdx,
+          timeLimitMinutes: q.timeMins,
+          startTime:        new Date().toISOString(),
+          status:           'in_progress',
+          goodiesReward:    null,
+        });
+      }
+    } catch {
+      setHuntTask({
+        _id: 'local-' + Date.now(),
+        questionText:     q.q,
+        questionIndex:    qIdx,
+        timeLimitMinutes: q.timeMins,
+        startTime:        new Date().toISOString(),
+        status:           'in_progress',
+        goodiesReward:    null,
+      });
+    }
+    setHuntStarting(false);
+    setChillOpen(true);
+  };
+
+  const fmtTimer = (sec) => {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
   };
 
   return (
@@ -910,6 +1028,59 @@ export default function LiveEvent() {
             onScanSuccess={handleScanSuccess}
             onClose={() => setScannerOpen(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ═══════ GOODIES NOTIFICATION MODAL ═══════ */}
+      <AnimatePresence>
+        {goodiesModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setGoodiesModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden text-center"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Confetti header */}
+              <div className="bg-gradient-to-br from-violet-600 to-purple-800 px-6 pt-8 pb-6 relative overflow-hidden">
+                <div className="absolute -top-10 -left-10 w-32 h-32 bg-white/10 rounded-full" />
+                <div className="absolute -bottom-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
+                <motion.div
+                  animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.15, 1.05, 1.15, 1] }}
+                  transition={{ duration: 0.8, repeat: 2 }}
+                  className="w-20 h-20 rounded-2xl bg-yellow-300 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-yellow-400/30"
+                >
+                  <Gift size={38} className="text-violet-700" />
+                </motion.div>
+                <h3 className="text-xl font-extrabold text-white mb-1">🎉 You&apos;ve Won!</h3>
+                <p className="text-purple-200 text-sm">Your treasure hunt was verified by CoCom!</p>
+              </div>
+
+              {/* Reward */}
+              <div className="px-6 py-6">
+                <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-2xl border border-amber-100 p-5 mb-5">
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Your Prize</p>
+                  <p className="text-lg font-extrabold text-dark leading-snug">{goodiesModal}</p>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed mb-5">
+                  Goodies will be delivered to you in a few days. Congratulations on completing the campus challenge! 🏆
+                </p>
+                <motion.button
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => setGoodiesModal(null)}
+                  className="w-full py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-violet-500 to-purple-700 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                >
+                  Awesome, Thanks! 🙌
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

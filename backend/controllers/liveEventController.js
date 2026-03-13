@@ -2,6 +2,7 @@ const LiveEvent    = require('../models/LiveEvent');
 const Hackathon    = require('../models/Hackathon');
 const HelpRequest  = require('../models/HelpRequest');
 const User         = require('../models/User');
+const TreasureHunt = require('../models/TreasureHunt');
 const crypto       = require('crypto');
 
 /* ───────────────────────────────────────────
@@ -376,6 +377,115 @@ exports.seedDemoEvent = async (req, res) => {
     });
   } catch (err) {
     console.error('seedDemoEvent error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ───────────────────────────────────────────
+   POST /api/live-event/gamification/start
+   Student starts a Chill Out Zone treasure hunt task.
+   Body: { questionText, questionIndex, timeLimitMinutes }
+   ─────────────────────────────────────────── */
+exports.startTreasureHunt = async (req, res) => {
+  try {
+    const { questionText, questionIndex, timeLimitMinutes = 10 } = req.body;
+
+    if (!questionText || questionIndex === undefined) {
+      return res.status(400).json({ message: 'questionText and questionIndex are required' });
+    }
+
+    // Determine hackathon
+    let hackathonId = null;
+    const liveEvent = await LiveEvent.findOne({ student: req.user.id });
+    if (liveEvent) {
+      hackathonId = liveEvent.hackathon;
+    } else {
+      const latest = await Hackathon.findOne().sort({ createdAt: -1 }).select('_id');
+      hackathonId = latest?._id || null;
+    }
+
+    if (!hackathonId) {
+      return res.status(400).json({ message: 'No hackathon found.' });
+    }
+
+    // Cancel any existing in_progress task for this student
+    await TreasureHunt.updateMany(
+      { student: req.user.id, hackathon: hackathonId, status: 'in_progress' },
+      { $set: { status: 'expired' } }
+    );
+
+    const task = await TreasureHunt.create({
+      student:          req.user.id,
+      hackathon:        hackathonId,
+      questionText,
+      questionIndex,
+      timeLimitMinutes,
+      startTime:        new Date(),
+      status:           'in_progress',
+    });
+
+    // Populate student name for CoComm view
+    const populatedTask = await TreasureHunt.findById(task._id).populate('student', 'name email');
+
+    return res.status(201).json({
+      success:  true,
+      task: {
+        _id:              populatedTask._id,
+        questionText:     populatedTask.questionText,
+        questionIndex:    populatedTask.questionIndex,
+        timeLimitMinutes: populatedTask.timeLimitMinutes,
+        startTime:        populatedTask.startTime,
+        status:           populatedTask.status,
+        goodiesReward:    populatedTask.goodiesReward,
+        studentName:      populatedTask.student?.name || 'Student',
+        studentEmail:     populatedTask.student?.email || '',
+      },
+    });
+  } catch (err) {
+    console.error('startTreasureHunt error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ───────────────────────────────────────────
+   GET /api/live-event/gamification/status
+   Returns the student's current or latest treasure hunt task
+   ─────────────────────────────────────────── */
+exports.getMyTreasureHunt = async (req, res) => {
+  try {
+    // Fetch most recent task (in_progress or completed)
+    const task = await TreasureHunt.findOne({ student: req.user.id })
+      .sort({ createdAt: -1 })
+      .select('-__v');
+
+    if (!task) {
+      return res.json({ success: true, task: null });
+    }
+
+    // Auto-expire if time has run out and still in_progress
+    if (task.status === 'in_progress') {
+      const elapsedMs  = Date.now() - new Date(task.startTime).getTime();
+      const limitMs    = task.timeLimitMinutes * 60 * 1000;
+      if (elapsedMs > limitMs) {
+        task.status = 'expired';
+        await task.save();
+      }
+    }
+
+    return res.json({
+      success: true,
+      task: {
+        _id:              task._id,
+        questionText:     task.questionText,
+        questionIndex:    task.questionIndex,
+        timeLimitMinutes: task.timeLimitMinutes,
+        startTime:        task.startTime,
+        status:           task.status,
+        goodiesReward:    task.goodiesReward,
+      },
+    });
+  } catch (err) {
+    console.error('getMyTreasureHunt error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };

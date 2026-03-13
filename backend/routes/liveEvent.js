@@ -19,4 +19,8 @@ router.post('/scan', protect, requireRole('organizer'), ctrl.scanQR);
 // ── Seed (no auth — for testing only) ────────────────────────────
 router.post('/seed', ctrl.seedDemoEvent);
 
+// ── Gamification / Chill Out Zone (student) ───────────────────────
+router.post('/gamification/start',  protect, requireRole('student'), ctrl.startTreasureHunt);
+router.get ('/gamification/status', protect, requireRole('student'), ctrl.getMyTreasureHunt);
+
 module.exports = router;
