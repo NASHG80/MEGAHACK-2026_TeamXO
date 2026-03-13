@@ -48,6 +48,32 @@ const getEventData = async (req, res) => {
           memberNames: [r.leaderName, ...(r.teamMembers || []).map(m => m.name)].filter(Boolean),
           memberStatus: {},
         }));
+
+        // ── Overlay actual entry status from EventTeam records ──────────────
+        // selfScan writes EventTeam records by teamId (REG-{id}), independent
+        // of hackathonId format. Query by teamId list to get real entry data.
+        if (realTeams.length > 0) {
+          const realTeamIds   = realTeams.map(t => t.teamId);
+          const entryRecords  = await EventTeam.find({ teamId: { $in: realTeamIds } }).lean();
+          const entryByTeamId = {};
+          for (const rec of entryRecords) {
+            entryByTeamId[rec.teamId] = rec;
+          }
+          realTeams = realTeams.map(t => {
+            const rec = entryByTeamId[t.teamId];
+            if (!rec) return t;
+            // Convert Mongoose Map / plain object for memberStatus
+            const ms = rec.memberStatus instanceof Map
+              ? Object.fromEntries(rec.memberStatus)
+              : (rec.memberStatus || {});
+            return {
+              ...t,
+              entered:      rec.entered     || false,
+              entryTime:    rec.entryTime   || null,
+              memberStatus: ms,
+            };
+          });
+        }
       }
     } catch (regErr) {
       // Registration model may not exist or query may fail — silently skip
