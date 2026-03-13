@@ -5,10 +5,14 @@ const {
   getMyHackathons,
   getHackathonManageData,
   updateHackathonSettings,
+  getShortlistedRecipients,
 } = require('../controllers/organizerHackathonController');
 
 // GET all hackathons for this organizer
 router.get('/', protect, requireRole('organizer', 'admin'), getMyHackathons);
+
+// GET shortlisted recipients (leader + all members) for certificate generation
+router.get('/:slug/shortlisted-recipients', protect, requireRole('organizer', 'admin'), getShortlistedRecipients);
 
 // GET single hackathon with participants + teams (for Manage Hackathon page)
 router.get('/:slug', protect, requireRole('organizer', 'admin'), getHackathonManageData);

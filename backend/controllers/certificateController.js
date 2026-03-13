@@ -142,29 +142,71 @@ exports.getRecipients = async (req, res) => {
   try {
     const { hackathonId } = req.params;
 
-    // Verify the hackathon exists
-    const hackathon = await Hackathon.findById(hackathonId).lean();
-    if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' });
-
-    // Authorisation: only the organizer who created this hackathon (or admin) can see recipients
-    if (req.user && req.user.role !== 'admin') {
-      if (hackathon.createdBy?.toString() !== req.user.id) {
-        return res.status(403).json({ message: 'You do not have permission to view recipients for this hackathon.' });
-      }
+    // Resolve hackathon by ObjectId OR slug (handles stale localStorage values)
+    let hackathon = null;
+    if (hackathonId.match(/^[a-f\d]{24}$/i)) {
+      hackathon = await Hackathon.findById(hackathonId).lean();
+    }
+    if (!hackathon) {
+      hackathon = await Hackathon.findOne({ slug: hackathonId }).lean();
+    }
+    if (!hackathon) {
+      console.error(`[getRecipients] Hackathon not found: "${hackathonId}"`);
+      return res.status(404).json({ message: `Hackathon not found (id/slug: ${hackathonId})` });
     }
 
-    // Fetch registrations that are shortlisted for this hackathon
+    console.log(`[getRecipients] Found hackathon: "${hackathon.title}" (${hackathon._id})`);
+
+    // Fetch shortlisted registrations
     const shortlistedRegs = await Registration.find({
       hackathon: hackathonId,
       shortlisted: true,
     }).lean();
 
-    const recipients = shortlistedRegs.map(r => ({
-      id:    r._id.toString(),
-      name:  r.leaderName && r.leaderName.trim() ? r.leaderName.trim() : r.leaderEmail.split('@')[0],
-      email: r.leaderEmail,
-      type:  'participant',
-    }));
+    // Also pull Team docs to get member emails not yet synced into Registration
+    const Team = require('../models/Team');
+    const teamDocs = await Team.find({ hackathonId })
+      .populate('members', 'name email')
+      .lean();
+    const teamByLeader = {};
+    for (const t of teamDocs) {
+      if (t.leaderEmail) teamByLeader[t.leaderEmail.toLowerCase()] = t;
+    }
+
+    const recipients = [];
+    for (const r of shortlistedRegs) {
+      // Always include the leader
+      recipients.push({
+        id:    r._id.toString() + '_leader',
+        name:  (r.leaderName || '').trim() || r.leaderEmail.split('@')[0],
+        email: r.leaderEmail,
+        type:  'participant',
+        teamName: r.teamName,
+      });
+
+      // Determine members list — Team doc is authoritative
+      const teamDoc = teamByLeader[(r.leaderEmail || '').toLowerCase()];
+      let members = [];
+      if (teamDoc && teamDoc.members && teamDoc.members.length > 0) {
+        const leaderEmail = (r.leaderEmail || '').toLowerCase();
+        members = teamDoc.members
+          .filter(m => (m.email || '').toLowerCase() !== leaderEmail)
+          .map(m => ({ name: m.name || '', email: m.email || '' }));
+      } else {
+        members = (r.teamMembers || []).map(m => ({ name: m.name || '', email: m.email || '' }));
+      }
+
+      for (const m of members) {
+        if (!m.email) continue;
+        recipients.push({
+          id:    r._id.toString() + '_' + m.email,
+          name:  m.name || m.email.split('@')[0],
+          email: m.email,
+          type:  'participant',
+          teamName: r.teamName,
+        });
+      }
+    }
 
     res.json({
       hackathon: { name: hackathon.title, date: hackathon.registrationDeadline, organizer: hackathon.organizerName },
@@ -265,7 +307,15 @@ exports.generateCertificates = async (req, res) => {
  */
 exports.getGenerationStatus = async (req, res) => {
   try {
-    const certs = await Certificate.find({ hackathonId: req.params.hackathonId }).lean();
+    const id = req.params.hackathonId;
+    // Accept both slug and ObjectId — store hackathonId as ObjectId in Certificate
+    // But Certificate.hackathonId may have been stored as slug too, query both ways
+    let hackathon = null;
+    if (id.match(/^[a-f\d]{24}$/i)) hackathon = await Hackathon.findById(id).lean();
+    if (!hackathon) hackathon = await Hackathon.findOne({ slug: id }).lean();
+    const hackId = hackathon?._id || id;
+
+    const certs = await Certificate.find({ hackathonId: hackId }).lean();
     const total     = certs.length;
     const pending   = certs.filter(c => c.status === 'pending').length;
     const generated = certs.filter(c => c.status === 'generated').length;
@@ -389,27 +439,51 @@ async function buildCertificateBuffer(base64Image, name, nameX, nameY, fontSize,
 }
 
 exports.generatePersonalized = async (req, res) => {
-  const { hackathonId } = req.params;
+  const id = req.params.hackathonId;
   const { templateId, recipients: providedRecipients, sendToAll = false } = req.body;
   try {
-    const template  = await CertificateTemplate.findById(templateId).lean();
-    if (!template)                      return res.status(404).json({ message: 'Template not found' });
-    if (!template.backgroundImageUrl)   return res.status(400).json({ message: 'Template has no background image.' });
-    const hackathon = await Hackathon.findById(hackathonId).lean();
-    if (!hackathon)                     return res.status(404).json({ message: 'Hackathon not found' });
+    const template = await CertificateTemplate.findById(templateId).lean();
+    if (!template)                    return res.status(404).json({ message: 'Template not found' });
+    if (!template.backgroundImageUrl) return res.status(400).json({ message: 'Template has no background image.' });
+
+    // Resolve hackathon by slug OR ObjectId
+    let hackathon = null;
+    if (id.match(/^[a-f\d]{24}$/i)) hackathon = await Hackathon.findById(id).lean();
+    if (!hackathon) hackathon = await Hackathon.findOne({ slug: id }).lean();
+    if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' });
+    const hackathonId = hackathon._id;  // always use the real ObjectId from here on
 
     let recipients = providedRecipients || [];
     if (sendToAll || recipients.length === 0) {
-      // Pull only shortlisted participants for THIS hackathon
-      const shortlistedRegs = await Registration.find({
-        hackathon: hackathonId,
-        shortlisted: true,
-      }).lean();
-      recipients = shortlistedRegs.map(r => ({
-        name:  r.leaderName && r.leaderName.trim() ? r.leaderName.trim() : r.leaderEmail.split('@')[0],
-        email: r.leaderEmail,
-        type:  'participant',
-      }));
+      // Pull shortlisted registrations + Team members
+      const { Team } = require('../models/Team');
+      const shortlistedRegs = await Registration.find({ hackathon: hackathonId, shortlisted: true }).lean();
+      const teamDocs = await Team.find({ hackathonId })
+        .populate('members', 'name email')
+        .lean();
+      const teamByLeader = {};
+      for (const t of teamDocs) {
+        if (t.leaderEmail) teamByLeader[t.leaderEmail.toLowerCase()] = t;
+      }
+
+      recipients = [];
+      for (const r of shortlistedRegs) {
+        // Leader
+        recipients.push({
+          name:  (r.leaderName || '').trim() || r.leaderEmail.split('@')[0],
+          email: r.leaderEmail,
+          type:  'participant',
+        });
+        // Other members from Team doc
+        const teamDoc = teamByLeader[(r.leaderEmail || '').toLowerCase()];
+        const members = teamDoc?.members?.length > 0
+          ? teamDoc.members.filter(m => (m.email || '').toLowerCase() !== (r.leaderEmail || '').toLowerCase())
+          : (r.teamMembers || []);
+        for (const m of members) {
+          if (!m.email) continue;
+          recipients.push({ name: m.name || m.email.split('@')[0], email: m.email, type: 'participant' });
+        }
+      }
     }
     if (recipients.length === 0) return res.status(400).json({ message: 'No shortlisted recipients found for this hackathon.' });
 

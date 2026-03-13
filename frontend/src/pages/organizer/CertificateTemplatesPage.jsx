@@ -317,38 +317,66 @@ function UploadPositionView({ onComplete, onBack }) {
 ═══════════════════════════════════════════════════════════ */
 function StudentRosterView({ templateConfig, onBack }) {
   const { templateId, backgroundImageUrl, nameX, nameY, fontSize, nameColor, templateName } = templateConfig;
-  const hackId = HACKATHON();
+
+  const ORGS_API = 'http://localhost:5000/api/organizer/hackathons';
+
+  /* ── Hackathon selector states ── */
+  const [hackathons,    setHackathons]    = useState([]);
+  const [activeSlug,    setActiveSlug]    = useState('');
+  const [hackathon,     setHackathon]     = useState(null);
 
   /* ── Data states ── */
   const [recipients,    setRecipients]    = useState([]);
-  const [hackathon,     setHackathon]     = useState(null);
   const [loading,       setLoading]       = useState(true);
   const [fetchError,    setFetchError]    = useState('');
   const [search,        setSearch]        = useState('');
 
   /* ── Send states ── */
-  const [sendStatus,    setSendStatus]    = useState({});   // { [email]: 'idle'|'sending'|'sent'|'failed' }
+  const [sendStatus,    setSendStatus]    = useState({});
   const [globalSending, setGlobalSending] = useState(false);
   const [sendError,     setSendError]     = useState('');
   const [progress,      setProgress]      = useState({ total: 0, sent: 0, failed: 0 });
 
-  /* ── Polling ref ── */
   const pollRef = useRef(null);
   const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
   useEffect(() => () => stopPoll(), []);
 
-  /* ── Fetch students + restore send statuses on mount ── */
+  /* ── Step 1: fetch organizer's hackathon list ── */
   useEffect(() => {
-    if (!hackId) {
-      setFetchError('No active hackathon found. Please go to the Dashboard and activate a hackathon first.');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
+    axios.get(ORGS_API, { headers: authHeader() })
+      .then(res => {
+        const list = res.data.data || [];
+        setHackathons(list);
+        if (list.length > 0) {
+          // prefer the stored active hackathon, else pick first
+          const storedId = localStorage.getItem('hf_active_hackathon') || '';
+          const match    = list.find(h => h._id === storedId) || list[0];
+          setActiveSlug(match.slug);
+        } else {
+          setFetchError('You have no hackathons. Create one first.');
+          setLoading(false);
+        }
+      })
+      .catch(err => {
+        setFetchError(err.response?.data?.message || 'Could not load hackathons. Make sure you are logged in as an organizer.');
+        setLoading(false);
+      });
+  }, []);
 
-    // Fetch both in parallel: student list + existing certificate records
+  /* ── Step 2: when activeSlug changes, fetch shortlisted recipients ── */
+  useEffect(() => {
+    if (!activeSlug) return;
+    setLoading(true);
+    setRecipients([]);
+    setHackathon(null);
+    setFetchError('');
+    setSendStatus({});
+    setGlobalSending(false);
+
     Promise.all([
-      axios.get(`${API_BASE}/recipients/${hackId}`),
-      axios.get(`${API_BASE}/status/${hackId}`).catch(() => ({ data: { certs: [] } })), // don't fail if no certs yet
+      axios.get(`${ORGS_API}/${activeSlug}/shortlisted-recipients`, { headers: authHeader() }),
+      axios.get(`${API_BASE}/status/${activeSlug}`, { headers: authHeader() }).catch(() => ({ data: { certs: [] } })),
     ])
       .then(([recipientsRes, statusRes]) => {
         const list  = recipientsRes.data.recipients || [];
@@ -357,89 +385,70 @@ function StudentRosterView({ templateConfig, onBack }) {
         setRecipients(list);
         setHackathon(recipientsRes.data.hackathon || null);
 
-        // Start with all idle, then overlay real status from the DB
         const statusMap = {};
         list.forEach(r => { statusMap[r.email] = 'idle'; });
 
-        // For each email, pick the MOST RECENT certificate record
-        // (sorted descending by createdAt so the latest state wins)
-        const sorted = [...certs].sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        );
+        const sorted = [...certs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const seen = new Set();
         sorted.forEach(c => {
           if (!seen.has(c.recipientEmail)) {
             seen.add(c.recipientEmail);
-            if (c.status === 'sent')            statusMap[c.recipientEmail] = 'sent';
-            else if (c.status === 'failed')      statusMap[c.recipientEmail] = 'failed';
-            else if (c.status === 'generated' || c.status === 'pending')
-                                                statusMap[c.recipientEmail] = 'sending';
+            if (c.status === 'sent')                                         statusMap[c.recipientEmail] = 'sent';
+            else if (c.status === 'failed')                                  statusMap[c.recipientEmail] = 'failed';
+            else if (c.status === 'generated' || c.status === 'pending')     statusMap[c.recipientEmail] = 'sending';
           }
         });
-
         setSendStatus(statusMap);
 
-        // If any certs are still in-flight, resume polling automatically
         const stillPending = certs.some(c => c.status === 'pending' || c.status === 'generated');
-        if (stillPending) {
-          setGlobalSending(true);
-          startPolling();
-        }
+        if (stillPending) { setGlobalSending(true); startPolling(); }
       })
       .catch(err => {
         console.error('Failed to fetch recipients:', err);
-        setFetchError(
-          err.response?.data?.message ||
-          'Could not load students. Make sure the backend is running and MongoDB is connected.'
-        );
+        setFetchError(err.response?.data?.message || 'Could not load shortlisted students. Make sure you have shortlisted teams in ManageHackathon first.');
       })
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hackId]);
-
+  }, [activeSlug]);
 
   /* ── Poll generation status from backend ── */
   const startPolling = useCallback(() => {
     stopPoll();
     pollRef.current = setInterval(async () => {
       try {
-        const { data } = await axios.get(`${API_BASE}/status/${hackId}`);
+        const { data } = await axios.get(`${API_BASE}/status/${activeSlug}`, { headers: authHeader() });
         const certs = data.certs || [];
 
         const newStatus = {};
         certs.forEach(c => {
-          if (c.status === 'sent')      newStatus[c.recipientEmail] = 'sent';
+          if (c.status === 'sent')        newStatus[c.recipientEmail] = 'sent';
           else if (c.status === 'failed') newStatus[c.recipientEmail] = 'failed';
-          else                           newStatus[c.recipientEmail] = 'sending';
+          else                            newStatus[c.recipientEmail] = 'sending';
         });
 
         setSendStatus(prev => ({ ...prev, ...newStatus }));
         setProgress({ total: data.total, sent: data.sent, failed: data.failed });
 
-        // Stop when none are still pending
         if (data.pending === 0 && data.total > 0) {
           stopPoll();
           setGlobalSending(false);
         }
       } catch { /* ignore transient errors */ }
     }, 1500);
-  }, [hackId]);
+  }, [activeSlug]);
 
   /* ── Send ALL ── */
   const sendAll = async () => {
-    if (!hackId) { setSendError('No active hackathon. Activate one from the Dashboard.'); return; }
+    if (!activeSlug) { setSendError('No hackathon selected.'); return; }
     setSendError('');
     setGlobalSending(true);
-
-    // Immediately mark all as sending in UI
     const sending = {};
     recipients.forEach(r => { sending[r.email] = 'sending'; });
     setSendStatus(sending);
     setProgress({ total: recipients.length, sent: 0, failed: 0 });
-
     try {
       await axios.post(
-        `${API_BASE}/generate-personalized/${hackId}`,
+        `${API_BASE}/generate-personalized/${activeSlug}`,
         { templateId, sendToAll: true },
         { headers: authHeader() }
       );
@@ -448,52 +457,37 @@ function StudentRosterView({ templateConfig, onBack }) {
       console.error('Send all failed:', err);
       setSendError(err.response?.data?.message || 'Failed to start certificate generation. Please try again.');
       setGlobalSending(false);
-      const reset = {};
-      recipients.forEach(r => { reset[r.email] = 'idle'; });
-      setSendStatus(reset);
+      const reset = {}; recipients.forEach(r => { reset[r.email] = 'idle'; }); setSendStatus(reset);
     }
   };
 
   /* ── Send ONE ── */
   const sendOne = async (recipient) => {
-    if (!hackId) { setSendError('No active hackathon.'); return; }
+    if (!activeSlug) { setSendError('No hackathon selected.'); return; }
     setSendError('');
     setSendStatus(prev => ({ ...prev, [recipient.email]: 'sending' }));
-
     try {
       await axios.post(
-        `${API_BASE}/generate-personalized/${hackId}`,
+        `${API_BASE}/generate-personalized/${activeSlug}`,
         { templateId, recipients: [{ name: recipient.name, email: recipient.email, type: recipient.type }] },
         { headers: authHeader() }
       );
-
-      // Poll every 1.2s for just this recipient
       const individualPoll = setInterval(async () => {
         try {
-          const { data } = await axios.get(`${API_BASE}/status/${hackId}`);
+          const { data } = await axios.get(`${API_BASE}/status/${activeSlug}`, { headers: authHeader() });
           const match = (data.certs || [])
             .filter(c => c.recipientEmail === recipient.email)
             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-
           if (match && match.status !== 'pending') {
-            setSendStatus(prev => ({
-              ...prev,
-              [recipient.email]: match.status === 'sent' ? 'sent' : 'failed',
-            }));
+            setSendStatus(prev => ({ ...prev, [recipient.email]: match.status === 'sent' ? 'sent' : 'failed' }));
             clearInterval(individualPoll);
           }
         } catch { clearInterval(individualPoll); }
       }, 1200);
-
-      // Safety timeout after 60s
       setTimeout(() => {
         clearInterval(individualPoll);
-        setSendStatus(prev => {
-          if (prev[recipient.email] === 'sending') return { ...prev, [recipient.email]: 'failed' };
-          return prev;
-        });
+        setSendStatus(prev => { if (prev[recipient.email] === 'sending') return { ...prev, [recipient.email]: 'failed' }; return prev; });
       }, 60000);
-
     } catch (err) {
       console.error('Send one failed:', err);
       setSendStatus(prev => ({ ...prev, [recipient.email]: 'failed' }));
@@ -542,6 +536,21 @@ function StudentRosterView({ templateConfig, onBack }) {
           <ArrowLeft size={14} /> Change Template
         </button>
         <div className="flex-1" />
+        {/* Hackathon selector */}
+        {hackathons.length > 1 && (
+          <div className="relative">
+            <select
+              value={activeSlug}
+              onChange={e => setActiveSlug(e.target.value)}
+              className="appearance-none text-xs font-bold text-dark bg-gray-100 border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-royal/20 cursor-pointer"
+            >
+              {hackathons.map(h => (
+                <option key={h._id} value={h.slug}>{h.title}</option>
+              ))}
+            </select>
+            <Filter size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+        )}
         {hackathon && (
           <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
             📌 {hackathon.name}
