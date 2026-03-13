@@ -5,8 +5,9 @@ const {
   updateHackathon, deleteHackathon, updateHackathonTimeline,
 } = require('../controllers/hackathonController');
 const { combinedUpload } = require('../middleware/uploadMiddleware');
+const { protect }        = require('../middleware/auth');
 
-router.post('/',           combinedUpload, createHackathon);
+router.post('/',           protect, combinedUpload, createHackathon);
 router.get('/',            getAllHackathons);
 router.get('/latest',      async (req, res) => {
   try {
@@ -19,13 +20,9 @@ router.get('/latest',      async (req, res) => {
   }
 });
 router.get('/:slug',       getHackathonBySlug);
-router.put('/:slug',       combinedUpload, updateHackathon);
-router.delete('/:slug',    deleteHackathon);
-router.post('/',                   combinedUpload, createHackathon);
-router.get('/',                    getAllHackathons);
-router.get('/:slug',               getHackathonBySlug);
 router.put('/:slug',               combinedUpload, updateHackathon);
 router.patch('/:slug/timeline',    updateHackathonTimeline);
 router.delete('/:slug',            deleteHackathon);
 
 module.exports = router;
+
