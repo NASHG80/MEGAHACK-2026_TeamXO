@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import OrganizerSidebar from '../../components/OrganizerSidebar';
+import StudentNavbar from '../../components/StudentNavbar';
 import { Monitor, Maximize, Minimize } from 'lucide-react';
 import bgImage from '../../assets/workspacebg.jpeg';
 import characterSprite from '../../assets/character_sprite.png';
@@ -54,10 +54,10 @@ export default function VirtualOffice() {
   };
 
   return (
-    <div className="flex h-screen bg-light-gray font-sans overflow-hidden">
-      <OrganizerSidebar />
+    <div className="min-h-screen bg-light-gray font-sans overflow-hidden flex flex-col">
+      <StudentNavbar />
 
-      <main className="flex-1 ml-60 flex flex-col items-center justify-center p-8">
+      <main className="flex-1 flex flex-col items-center justify-center p-8">
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-black text-dark mb-2">Virtual Office</h1>
           <p className="text-gray-500 font-semibold text-sm">Hover over workstations to view team assignments</p>

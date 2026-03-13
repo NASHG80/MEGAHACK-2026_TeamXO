@@ -28,7 +28,8 @@ import HackathonDetails from './pages/student/HackathonDetails';
 import HackathonPublicPage from './pages/student/HackathonPublicPage';
 import HackathonRegisterPage from './pages/student/HackathonRegisterPage';
 import Certificates     from './pages/student/Certificates';
-import LiveEvent from './pages/student/LiveEvent';
+import LiveEvent        from './pages/student/LiveEvent';
+import Community        from './pages/student/Community';
 
 
 
@@ -66,7 +67,9 @@ export default function App() {
         <Route path="/student/dashboard"      element={<ProtectedRoute role="student"><Dashboard /></ProtectedRoute>} />
         <Route path="/student/profile"        element={<ProtectedRoute role="student"><Profile /></ProtectedRoute>} />
         <Route path="/student/hackathon/:id"  element={<ProtectedRoute role="student"><HackathonDetails /></ProtectedRoute>} />
-        <Route path="/student/certificates"   element={<ProtectedRoute role="student"><Certificates /></ProtectedRoute>} />
+        <Route path="/student/certificates"      element={<ProtectedRoute role="student"><Certificates /></ProtectedRoute>} />
+        <Route path="/student/community"           element={<ProtectedRoute role="student"><Community /></ProtectedRoute>} />
+        <Route path="/student/virtual-office"      element={<ProtectedRoute role="student"><VirtualOffice /></ProtectedRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

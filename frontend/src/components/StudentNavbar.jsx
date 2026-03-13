@@ -3,8 +3,10 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, User, Radio, LogOut, Zap } from 'lucide-react';
 
 const BASE_LINKS = [
-  { label: 'Dashboard',    to: '/student/dashboard' },
-  { label: 'Certificates', to: '/student/certificates' },
+  { label: 'Dashboard',       to: '/student/dashboard' },
+  { label: 'Community',       to: '/student/community' },
+  { label: 'Virtual Office',  to: '/student/virtual-office' },
+  { label: 'Certificates',    to: '/student/certificates' },
 ];
 
 export default function StudentNavbar() {

@@ -981,6 +981,144 @@ export default function LiveEvent() {
           </motion.div>
         </div>
 
+        {/* ── Chill Out Zone / Treasure Hunt ── */}
+        <motion.div custom={8} variants={cardUp} initial="hidden" animate="visible" className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <Gift size={18} className="text-violet-500" />
+            <h2 className="text-lg font-extrabold text-dark">Chill Out Zone 🎮</h2>
+          </div>
+          <p className="text-xs text-gray-400 ml-[26px] mb-5">
+            Take a break and join the Treasure Hunt challenge — complete tasks, impress CoCom, and win goodies!
+          </p>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-md p-6">
+
+            {/* Loading state */}
+            {huntLoading ? (
+              <div className="flex items-center justify-center py-10 gap-3">
+                <Loader2 className="animate-spin text-royal" size={20} />
+                <p className="text-sm text-gray-400">Loading challenge status…</p>
+              </div>
+            ) : !huntTask ? (
+              /* ── No active task — pick a challenge ── */
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-bold text-dark">Pick a Challenge</p>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+                    {TREASURE_HUNT_QUESTIONS.length} tasks available
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
+                  {TREASURE_HUNT_QUESTIONS.map((q, idx) => (
+                    <motion.div
+                      key={idx}
+                      whileHover={{ scale: 1.01 }}
+                      onClick={() => setSelectedQ(selectedQ === idx ? null : idx)}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        selectedQ === idx
+                          ? 'border-violet-400 bg-violet-50'
+                          : 'border-gray-100 hover:border-violet-200 bg-gray-50/70'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <Trophy size={14} className={`shrink-0 mt-0.5 ${selectedQ === idx ? 'text-violet-500' : 'text-gray-300'}`} />
+                        <p className="text-xs text-gray-700 leading-relaxed flex-1">{q.q}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <Timer size={11} className="text-gray-400" />
+                        <span className="text-[10px] font-semibold text-gray-400">{q.timeMins} min limit</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Start button */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  disabled={selectedQ === null || huntStarting}
+                  onClick={() => startHunt(selectedQ)}
+                  className="mt-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold text-white
+                             bg-gradient-to-r from-violet-500 to-purple-600 shadow-lg shadow-violet-500/25
+                             disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                >
+                  {huntStarting
+                    ? <><Loader2 size={15} className="animate-spin" /> Starting…</>
+                    : <><Zap size={15} /> Start Challenge</>
+                  }
+                </motion.button>
+              </div>
+
+            ) : huntTask.status === 'in_progress' ? (
+              /* ── Active challenge in progress ── */
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-2xl bg-violet-50 flex items-center justify-center mx-auto mb-4">
+                  <Timer size={28} className="text-violet-500" />
+                </div>
+                <p className="text-[10px] font-bold text-violet-500 uppercase tracking-widest mb-2">Challenge In Progress</p>
+                <p className="text-sm font-bold text-dark leading-snug mb-5 max-w-sm mx-auto">{huntTask.questionText}</p>
+
+                {/* Countdown timer */}
+                <motion.div
+                  animate={huntTimer < 60 ? { scale: [1, 1.05, 1] } : {}}
+                  transition={{ duration: 0.5, repeat: Infinity }}
+                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-2xl mb-6 text-3xl font-black font-mono tracking-widest ${
+                    huntTimer < 60 ? 'bg-red-50 text-red-500' : 'bg-violet-50 text-violet-600'
+                  }`}
+                >
+                  <Timer size={22} />
+                  {fmtTimer(huntTimer)}
+                </motion.div>
+
+                <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                  Complete the task and show proof to a CoCom member to get it verified. They'll mark it as accepted!
+                </p>
+
+                <div className="mt-4 flex items-center justify-center gap-2 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
+                  <PackageCheck size={14} /> Waiting for CoCom verification…
+                </div>
+              </div>
+
+            ) : huntTask.status === 'completed' ? (
+              /* ── Completed ── */
+              <div className="text-center py-6">
+                <motion.div
+                  animate={{ scale: [1, 1.15, 1], rotate: [0, -5, 5, 0] }}
+                  transition={{ duration: 0.6, repeat: 2 }}
+                  className="w-20 h-20 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4"
+                >
+                  <Trophy size={38} className="text-emerald-500" />
+                </motion.div>
+                <h3 className="text-xl font-extrabold text-dark mb-1">Challenge Completed! 🎉</h3>
+                <p className="text-sm text-gray-500 mb-4">CoCom has verified your task. Your reward is on its way!</p>
+                {huntTask.goodiesReward && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 max-w-xs mx-auto">
+                    <p className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-1">Prize</p>
+                    <p className="text-base font-extrabold text-dark">{huntTask.goodiesReward}</p>
+                  </div>
+                )}
+              </div>
+
+            ) : (
+              /* ── Expired ── */
+              <div className="text-center py-6">
+                <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle size={28} className="text-red-400" />
+                </div>
+                <h3 className="text-base font-extrabold text-dark mb-1">Time's Up!</h3>
+                <p className="text-sm text-gray-500 mb-5">Your challenge expired. Pick a new one!</p>
+                <motion.button
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => setHuntTask(null)}
+                  className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-violet-500 to-purple-600 shadow-md cursor-pointer"
+                >
+                  Try Another Challenge
+                </motion.button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
         {/* ── Quick Tips ── */}
         <motion.div custom={7} variants={cardUp} initial="hidden" animate="visible"
           className="bg-gradient-to-r from-royal/5 to-blue-50 rounded-2xl border border-royal/10 p-6"
@@ -1005,6 +1143,7 @@ export default function LiveEvent() {
 
       </main>
       )}
+
 
       {/* ═══════ HELP REQUEST MODAL ═══════ */}
       <AnimatePresence>

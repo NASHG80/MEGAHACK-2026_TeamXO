@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, PlusCircle, ClipboardList, FileText,
-  CalendarCheck, Award, Settings, ChevronRight, ChevronLeft, Zap, UserCircle, ShieldCheck, Users2, Monitor,
+  CalendarCheck, Award, Settings, ChevronRight, ChevronLeft, Zap, UserCircle, ShieldCheck, Users2,
 } from 'lucide-react';
 
 const NAV = [
@@ -14,7 +14,6 @@ const NAV = [
   { label: 'CoCom Dashboard',   href: '/organizer/cocom',          icon: Users2          },
   { label: 'Certificates',      href: '/organizer/certificates',   icon: Award           },
   { label: 'MyProfile',         href: '/organizer/profile',        icon: UserCircle      },
-  { label: 'Virtual Office',    href: '/organizer/virtual-office', icon: Monitor         },
 ];
 
 /**
