@@ -110,12 +110,12 @@ function ProgressTracker({ entry, lunch, dinner }) {
 }
 
 /* ═══════════ SCAN STATUS ROW ═══════════ */
-function ScanStatusRow({ icon: Icon, label, status, iconBg, onSimulate }) {
+function ScanStatusRow({ icon: Icon, label, status, iconBg, onScan }) {
   return (
     <motion.div
       whileHover={{ x: 2, backgroundColor: 'rgba(30,58,138,0.02)' }}
       className="flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer border border-transparent hover:border-gray-100"
-      onClick={onSimulate}
+      onClick={onScan}
     >
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
@@ -123,7 +123,7 @@ function ScanStatusRow({ icon: Icon, label, status, iconBg, onSimulate }) {
         </div>
         <div>
           <p className="text-sm font-bold text-dark">{label}</p>
-          <p className="text-[10px] text-gray-400">Tap to simulate scan</p>
+          <p className="text-[10px] text-gray-400">Tap to open camera scanner</p>
         </div>
       </div>
       <AnimatePresence mode="wait">
@@ -313,19 +313,30 @@ export default function LiveEvent() {
 
   /* ─── Universal Scanner state ────────────────────────────────────── */
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [workspaceJustRevealed, setWorkspaceJustRevealed] = useState(false);
 
   /**
    * Called by EventQRScanner once the backend confirms a scan (success or duplicate).
    * Receives authoritative status values straight from the API response.
    */
-  const handleScanSuccess = useCallback(({ action, entryStatus, lunchStatus, dinnerStatus }) => {
-    setEvent(prev => ({
-      ...prev,
-      // If the API returned explicit status strings, use them; otherwise fall back to action-based logic
-      entryStatus:  entryStatus  ?? (action === 'entry'  ? 'Entered'   : prev.entryStatus),
-      lunchStatus:  lunchStatus  ?? (action === 'lunch'  ? 'Claimed'   : prev.lunchStatus),
-      dinnerStatus: dinnerStatus ?? (action === 'dinner' ? 'Claimed'   : prev.dinnerStatus),
-    }));
+  const handleScanSuccess = useCallback(({ action, entryStatus, lunchStatus, dinnerStatus, workspaceNumber, workspaceLocation }) => {
+    setEvent(prev => {
+      const next = {
+        ...prev,
+        entryStatus:  entryStatus  ?? (action === 'entry'  ? 'Entered' : prev.entryStatus),
+        lunchStatus:  lunchStatus  ?? (action === 'lunch'  ? 'Claimed' : prev.lunchStatus),
+        dinnerStatus: dinnerStatus ?? (action === 'dinner' ? 'Claimed' : prev.dinnerStatus),
+      };
+      // Update workspace details if returned by backend (entry scan response)
+      if (workspaceNumber)   next.workspaceNumber   = workspaceNumber;
+      if (workspaceLocation) next.workspaceLocation = workspaceLocation;
+      return next;
+    });
+    // Pulse-highlight the workspace card when entry is freshly scanned
+    if (action === 'entry') {
+      setWorkspaceJustRevealed(true);
+      setTimeout(() => setWorkspaceJustRevealed(false), 4000);
+    }
   }, []);
 
   /* Simulate scans (fallback when no camera) */
@@ -748,25 +759,25 @@ export default function LiveEvent() {
               className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-md p-6 flex flex-col"
             >
               <h3 className="text-sm font-bold text-dark mb-1">Scan Status Tracking</h3>
-              <p className="text-[10px] text-gray-400 mb-4">Click any row to simulate a QR scan</p>
+              <p className="text-[10px] text-gray-400 mb-4">Click any row to open the QR scanner &amp; mark your status</p>
 
               <div className="space-y-1 flex-1">
                 <ScanStatusRow
                   icon={DoorOpen} label="Gate Entry" status={event.entryStatus}
                   iconBg="bg-gradient-to-br from-blue-500 to-royal"
-                  onSimulate={simEntry}
+                  onScan={() => setScannerOpen(true)}
                 />
                 <div className="h-px bg-gray-50 mx-4" />
                 <ScanStatusRow
                   icon={Coffee} label="Lunch" status={event.lunchStatus}
                   iconBg="bg-gradient-to-br from-amber-400 to-orange-500"
-                  onSimulate={simLunch}
+                  onScan={() => setScannerOpen(true)}
                 />
                 <div className="h-px bg-gray-50 mx-4" />
                 <ScanStatusRow
                   icon={Utensils} label="Dinner" status={event.dinnerStatus}
                   iconBg="bg-gradient-to-br from-violet-500 to-purple-600"
-                  onSimulate={simDinner}
+                  onScan={() => setScannerOpen(true)}
                 />
               </div>
 
@@ -788,7 +799,11 @@ export default function LiveEvent() {
           {/* Workspace Card */}
           <motion.div custom={3} variants={cardUp} initial="hidden" animate="visible"
             whileHover={{ y: -4, boxShadow: '0 12px 40px rgba(0,0,0,0.08)' }}
-            className="bg-white rounded-2xl border border-gray-100 p-6 shadow-md transition-all"
+            className={`bg-white rounded-2xl border p-6 shadow-md transition-all ${
+              workspaceJustRevealed
+                ? 'border-emerald-300 ring-2 ring-emerald-200 shadow-emerald-100'
+                : 'border-gray-100'
+            }`}
           >
             <div className="flex items-center gap-3 mb-5">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center">
