@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+@theme {
+  --color-royal: #1E3A8A;
+  --color-royal-light: #2563EB;
+  --color-royal-dark: #1E2D5F;
+  --color-dark: #111111;
+  --color-light-gray: #F7F8FA;
+  --color-card-shadow: rgba(30, 58, 138, 0.08);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Base resets */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-dark);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Shadcn UI CSS Variables */
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #1d4ed8;
+  --radius: 0.5rem;
+}
+
+/* ═══ Hackathon Component Styles ══════════════════════════════════╗
+   Shared classes used by HeroSection, TracksSection, TimelineSection,
+   EventInfoCard, PreviewModal, etc.
+══════════════════════════════════════════════════════════════════════ */
+
+.container-lg {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+@media (min-width: 640px) {
+  .container-lg { padding-left: 1.5rem; padding-right: 1.5rem; }
+}
+
+.card {
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 4px 0 rgba(0,0,0,.08);
+  overflow: hidden;
+}
+.card-hover { transition: box-shadow 0.2s, transform 0.2s; }
+.card-hover:hover { box-shadow: 0 8px 24px rgba(0,0,0,.12); transform: translateY(-2px); }
+.shadow-card { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.625rem 1.25rem; background: #1E3A8A; color: white;
+  font-weight: 600; font-size: 0.875rem; border-radius: 0.5rem;
+  transition: background 0.15s; text-decoration: none; border: none; cursor: pointer;
+}
+.btn-primary:hover { background: #2563EB; }
+
+.btn-outline {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.625rem 1.25rem; border: 2px solid #1E3A8A; color: #1E3A8A;
+  font-weight: 600; font-size: 0.875rem; border-radius: 0.5rem;
+  transition: background 0.15s; background: transparent; cursor: pointer;
+}
+.btn-outline:hover { background: #eff6ff; }
+
+.btn-register {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.875rem; background: #1E3A8A; color: white; font-weight: 700;
+  font-size: 1rem; border-radius: 0.75rem; transition: background 0.15s;
+  box-shadow: 0 4px 12px rgba(30,58,138,.25); text-decoration: none; border: none; cursor: pointer;
+}
+.btn-register:hover { background: #2563EB; }
+
+.input {
+  width: 100%; padding: 0.625rem 0.875rem; border: 1px solid #e2e8f0;
+  border-radius: 0.5rem; font-size: 0.875rem; color: #111; background: white;
+  transition: border-color 0.15s;
+}
+.input:focus { outline: none; border-color: #1E3A8A; box-shadow: 0 0 0 2px rgba(30,58,138,.15); }
+.textarea { resize: none; }
+.label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.375rem; }
+.select { appearance: none; cursor: pointer; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.125rem 0.625rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;
+}
+
+.tab-pill { padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; border-radius: 0.5rem; white-space: nowrap; transition: all 0.15s; cursor: pointer; border: none; background: transparent; }
+.tab-pill-active { background: #1E3A8A; color: white; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.tab-pill-idle { color: #64748b; }
+.tab-pill-idle:hover { color: #1E3A8A; background: #eff6ff; }
+
+.section-head { font-weight: 700; font-size: 1.25rem; color: #111; margin-bottom: 0.25rem; }
+.section-sub  { color: #6b7280; font-size: 0.875rem; margin-bottom: 1.5rem; }
+
+.form-card { background: white; border-radius: 1rem; border: 1px solid #f1f5f9; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 1.5rem; margin-bottom: 1.25rem; }
+.form-card-title { font-weight: 700; font-size: 0.9375rem; color: #111; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #f1f5f9; }
+
+.tl-dot { width: 0.875rem; height: 0.875rem; border-radius: 9999px; background: #1E3A8A; border: 3px solid #dbeafe; flex-shrink: 0; z-index: 10; }
+
+.glass { backdrop-filter: blur(14px) saturate(1.4); background: rgba(255,255,255,.82); }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in { animation: fadeIn 0.35s ease forwards; }
