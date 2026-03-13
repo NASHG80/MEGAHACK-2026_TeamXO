@@ -1,6 +1,7 @@
 const path     = require('path');
 const fs       = require('fs');
 const Hackathon = require('../models/Hackathon');
+const User      = require('../models/User');
 const slugify   = require('slugify');
 const { processImageToBase64 } = require('../utils/imageProcessor');
 const { uploadDir } = require('../middleware/uploadMiddleware');
@@ -33,6 +34,15 @@ const savePdfToDisk = (fileObj) => {
 /* ── CREATE ───────────────────────────────────────────── */
 const createHackathon = async (req, res) => {
   try {
+    // Verify that the requesting user is an approved organizer
+    const user = await User.findById(req.user.id).select('orgVerified');
+    if (!user || !user.orgVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your organizer account must be verified by an admin before creating hackathons.',
+      });
+    }
+
     const body = req.body;
 
     let slug = slugify(body.title, { lower: true, strict: true });
@@ -99,6 +109,7 @@ const createHackathon = async (req, res) => {
       rules:                parse(body.rules)  || [],
       organizerContact:     body.organizerContact,
       whatsappLink:         body.whatsappLink || '',
+      createdBy:            req.user.id,   // link to the organizer who created it
     };
 
     const hackathon = await Hackathon.create(data);
