@@ -191,7 +191,7 @@ exports.getMe = async (req, res) => {
     const user = await User.findById(req.user.id).select('name email');
     if (!user) return res.status(404).json({ success: false, joined: false });
 
-    const member = await CocomMember.findOne({ email: user.email });
+    const member = await CocomMember.findOne({ email: user.email }).sort({ createdAt: -1 });
     if (!member) return res.json({ success: true, joined: false });
 
     return res.json({
@@ -213,11 +213,17 @@ exports.getDashboard = async (req, res) => {
   try {
     const { memberId } = req.params;
 
-    // Fetch member + their tasks
+    // Fetch the requested member record
     const member = await CocomMember.findById(memberId);
     if (!member) return res.status(404).json({ success: false, message: 'Member not found' });
 
-    const tasks = await CocomTask.find({ assigned_to: memberId }).sort({ createdAt: -1 });
+    // Collect ALL CocomMember IDs for this person's email (they may have joined multiple times
+    // or under different hackathon_ids, and the organizer may have assigned a task to any of them)
+    const allMemberDocs = await CocomMember.find({ email: member.email }).select('_id');
+    const allMemberIds  = allMemberDocs.map(m => m._id);
+
+    // Fetch tasks assigned to any of this user's member IDs
+    const tasks = await CocomTask.find({ assigned_to: { $in: allMemberIds } }).sort({ createdAt: -1 });
 
     // Fetch hackathon info: try by stored hackathon_id first, fallback to latest hackathon
     const Hackathon = require('../models/Hackathon');

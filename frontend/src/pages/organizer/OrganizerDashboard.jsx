@@ -66,9 +66,19 @@ export default function OrganizerDashboard() {
     setActiveHackathonId(id);
   };
 
+  // Populate user info from localStorage (set during login)
   useEffect(() => {
-    // Fetch all hackathons from the standard public endpoint
-    axios.get('http://localhost:5000/api/hackathons')
+    const name  = localStorage.getItem('hf_name')  || 'Organizer';
+    const email = localStorage.getItem('hf_email') || '';
+    setUser({ name, email });
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('hf_token');
+    // Fetch only THIS organizer's hackathons via the protected endpoint
+    axios.get('http://localhost:5000/api/organizer/hackathons', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then(res => {
         const list = res.data.data || [];
         setHackathons(list);

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, Upload,
   Trophy, Calendar, Users, Tag, Building2,
   AlertCircle, Mail, MessageSquare, FileText, Save,
-  Eye, X, Download, ExternalLink, Loader2, ChevronDown
+  Eye, X, Download, ExternalLink, Loader2, ChevronDown,
+  ShieldCheck, Lock,
 } from 'lucide-react';
 import axios from 'axios';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
@@ -307,6 +308,23 @@ export default function CreateHackathon() {
   const [showPreview, setShowPreview] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  /* ── Verification gate ── */
+  const [verifyStatus, setVerifyStatus] = useState('loading'); // 'loading' | 'approved' | 'blocked'
+
+  useEffect(() => {
+    const token = localStorage.getItem('hf_token');
+    if (!token) { setVerifyStatus('blocked'); return; }
+    fetch('http://localhost:5000/api/organizer/verification/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(data => {
+        const status = data?.verification?.status;
+        setVerifyStatus(status === 'approved' ? 'approved' : 'blocked');
+      })
+      .catch(() => setVerifyStatus('blocked'));
+  }, []);
+
   /* ── form state ── */
   const [form, setForm] = useState({
     // Hero card
@@ -425,8 +443,12 @@ export default function CreateHackathon() {
       if (form.logoImage) data.append('logoImage', form.logoImage);
       if (form.problemStatementFile) data.append('problemStatementFile', form.problemStatementFile);
 
+      const token = localStorage.getItem('hf_token');
       await axios.post('http://localhost:5000/api/hackathons', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       alert('Hackathon created successfully!');
@@ -438,6 +460,52 @@ export default function CreateHackathon() {
       setLoading(false);
     }
   };
+
+  /* ── Verification loading spinner ── */
+  if (verifyStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#F5F7FB] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-royal/30 border-t-royal rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  /* ── Not verified lock screen ── */
+  if (verifyStatus === 'blocked') {
+    return (
+      <div className="min-h-screen bg-[#F5F7FB] font-sans">
+        <OrganizerSidebar />
+        <div className="transition-all duration-300 lg:pl-60">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="bg-white rounded-2xl border border-amber-200 shadow-[0_4px_24px_rgba(0,0,0,0.08)] p-10 max-w-md w-full text-center">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-5">
+                <Lock size={28} className="text-amber-500" />
+              </div>
+              <h1 className="text-xl font-extrabold text-[#0A1628] mb-2">Verification Required</h1>
+              <p className="text-sm text-gray-500 mb-6">
+                You need to be verified by an admin before you can create hackathons.
+                Submit your verification request from your profile page.
+              </p>
+              <div className="flex flex-col gap-2.5">
+                <button
+                  onClick={() => navigate('/organizer/profile')}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-royal text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-royal/20 cursor-pointer"
+                >
+                  <ShieldCheck size={15} /> Go to Profile &amp; Verify
+                </button>
+                <button
+                  onClick={() => navigate('/organizer-dashboard')}
+                  className="w-full px-5 py-3 text-sm font-semibold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-light-gray">
