@@ -36,6 +36,7 @@ export default function HackathonRegisterPage() {
   const [resumeFile, setResumeFile] = useState(null);
   const [pptFile,    setPptFile]    = useState(null);
   const [joinCode,   setJoinCode]   = useState('');
+  const [joinCollege, setJoinCollege] = useState('');
 
   const [submitting,  setSubmitting]  = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -152,7 +153,7 @@ export default function HackathonRegisterPage() {
       const res = await fetch(`${API}/teams/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ teamCode: joinCode.trim().toUpperCase() }),
+        body: JSON.stringify({ teamCode: joinCode.trim().toUpperCase(), college: joinCollege.trim() }),
       }).then(r => r.json());
 
       if (!res.success && res.message?.toLowerCase().includes('already a member')) {
@@ -458,13 +459,27 @@ export default function HackathonRegisterPage() {
                   <p className="text-sm text-gray-500 mb-4">
                     Ask your team leader for the 6-character code and enter it below.
                   </p>
-                  <input
-                    value={joinCode}
-                    onChange={e => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
-                    className="input text-center text-2xl font-black tracking-[0.4em] uppercase"
-                    placeholder="X4K9P2"
-                    maxLength={6}
-                  />
+                  <div className="space-y-3">
+                    <div>
+                      <label className="label">Team Code *</label>
+                      <input
+                        value={joinCode}
+                        onChange={e => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
+                        className="input text-center text-2xl font-black tracking-[0.4em] uppercase"
+                        placeholder="X4K9P2"
+                        maxLength={6}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Your College / Institution *</label>
+                      <input
+                        value={joinCollege}
+                        onChange={e => setJoinCollege(e.target.value)}
+                        className="input"
+                        placeholder="e.g. NMIMS Mumbai"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
