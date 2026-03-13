@@ -3,6 +3,16 @@ import { useParams } from 'react-router-dom';
 import { ChevronDown, CheckCircle2, AlertTriangle } from 'lucide-react';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return isMobile;
+}
+
 /* ═══════════════════════ TIMELINE & PHASES ═══════════════════════ */
 const PHASES = ['Check-In', 'Hacking', 'Lunch', 'Judging', 'Dinner', 'Results'];
 
@@ -136,12 +146,12 @@ function EventHeader({ hackId, hackathon, timeline }) {
     : (doneCount > 0 ? 100 : 0);
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.06)', padding: '28px 32px 24px', marginBottom: '24px', position: 'relative', overflow: 'hidden' }}>
+    <div className="em-event-header" style={{ background: '#ffffff', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.06)', padding: '28px 32px 24px', marginBottom: '24px', position: 'relative', overflow: 'hidden' }}>
       {/* Subtle top-right accent */}
       <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(30,100,255,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       {/* ── Row 1: Title + clock ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+      <div className="em-header-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '20px', padding: '3px 12px', fontSize: '11px', fontWeight: 800, color: '#16a34a', letterSpacing: '0.6px' }}>
@@ -157,7 +167,7 @@ function EventHeader({ hackId, hackathon, timeline }) {
             {hackathon?.deadline ? `Deadline: ${hackathon.deadline}` : hackathon ? 'Event Ongoing' : 'No event data'}
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+        <div className="em-header-clock" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
           <LiveClock />
           <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'right' }}>
             {doneCount}/{totalCount} phases completed
@@ -194,7 +204,7 @@ function EventHeader({ hackId, hackathon, timeline }) {
               style={{ display: 'flex', alignItems: 'center', flexShrink: 0, minWidth: 0 }}>
 
               {/* ── Node card ── */}
-              <div style={{
+              <div className="em-timeline-node" style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
                 padding: '12px 16px',
                 borderRadius: '14px',
@@ -513,9 +523,9 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
 
       {/* ══════ AUTO ASSIGN MODAL ══════ */}
       {showAutoModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(10,22,40,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+        <div className="em-modal-wrap" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(10,22,40,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           onClick={e => e.target === e.currentTarget && setShowAutoModal(false)}>
-          <div style={{ background: '#fff', borderRadius: '20px', boxShadow: '0 24px 80px rgba(0,0,0,0.18)', width: '100%', maxWidth: '620px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', animation: 'slideDown .25s ease' }}>
+          <div className="em-modal-inner" style={{ background: '#fff', borderRadius: '20px', boxShadow: '0 24px 80px rgba(0,0,0,0.18)', width: '100%', maxWidth: '620px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', animation: 'slideDown .25s ease' }}>
 
             {/* Modal header */}
             <div style={{ padding: '22px 28px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -592,31 +602,31 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       )}
 
       {/* ── Header ── */}
-      <div style={{ padding: '20px 26px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+      <div className="em-ws-header em-section-header" style={{ padding: '20px 26px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ fontSize: '17px', fontWeight: 700, color: '#0A1628' }}>Workspace Assignment</div>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Assign teams manually or auto-assign all at once · click chips to pick individual workstations</div>
         </div>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div className="em-ws-btns" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {unassignedTeams.length > 0 ? (
-            <button onClick={openAutoModal} className="btn-hover"
+            <button onClick={openAutoModal} className="btn-hover em-ws-btn"
               style={{ padding: '9px 18px', borderRadius: '10px', background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px' }}>
               <span style={{ fontSize: '16px', lineHeight: 1 }}>⚡</span> Auto Assign
             </button>
           ) : (
-            <button disabled
+            <button disabled className="em-ws-btn"
               style={{ padding: '9px 18px', borderRadius: '10px', background: '#e2e8f0', color: '#94a3b8', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '7px' }}>
               <span style={{ fontSize: '16px', lineHeight: 1 }}>⚡</span> Auto Assign
             </button>
           )}
-          <button onClick={() => setShowAdd(v => !v)} className="btn-hover" style={{ padding: '9px 18px', borderRadius: '10px', background: 'linear-gradient(135deg,#1E64FF,#4D8EFF)', color: '#fff', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => setShowAdd(v => !v)} className="btn-hover em-ws-btn" style={{ padding: '9px 18px', borderRadius: '10px', background: 'linear-gradient(135deg,#1E64FF,#4D8EFF)', color: '#fff', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'pointer' }}>
             + Add Workspace
           </button>
         </div>
       </div>
 
       {/* ── Summary bar ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+      <div className="em-summary" style={{ display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
         {[
           ['Available', statCounts.available || 0, '#22c55e'],
           ['Partial', statCounts.partial || 0, '#f59e0b'],
@@ -641,7 +651,7 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       {/* ── Add workspace form ── */}
       {showAdd && (
         <div style={{ padding: '20px 26px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', animation: 'slideDown .25s ease' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '12px', marginBottom: '12px' }}>
+          <div className="em-add-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '12px', marginBottom: '12px' }}>
             {[['Floor', 'floor', 'text', 'e.g. Ground Floor'], ['Number', 'number', 'text', 'e.g. Lab 1'], ['Workstations', 'capacity', 'number', '30'], ['Note (optional)', 'note', 'text', 'e.g. Has projector']].map(([label, key, type, ph]) => (
               <div key={key}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</label>
@@ -666,17 +676,17 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       )}
 
       {/* ── Filter tabs ── */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', padding: '0 14px' }}>
+      <div className="em-filter-tabs" style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', padding: '0 14px', overflowX: 'auto' }}>
         {['All', 'Available', 'Partial', 'Full'].map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
-            style={{ padding: '12px 16px', fontSize: '13px', fontWeight: statusFilter === s ? 700 : 500, color: statusFilter === s ? '#1E64FF' : '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: statusFilter === s ? '2px solid #1E64FF' : '2px solid transparent', whiteSpace: 'nowrap', transition: 'all .15s' }}>
+          <button key={s} onClick={() => setStatusFilter(s)} className="em-filter-tab"
+            style={{ padding: '12px 16px', fontSize: '13px', fontWeight: statusFilter === s ? 700 : 500, color: statusFilter === s ? '#1E64FF' : '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: statusFilter === s ? '2px solid #1E64FF' : '2px solid transparent', whiteSpace: 'nowrap', transition: 'all .15s', flexShrink: 0 }}>
             {s}
           </button>
         ))}
       </div>
 
       {/* ── Workspace cards ── */}
-      <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px', maxHeight: '600px', overflowY: 'auto' }}>
+      <div className="em-ws-grid em-section-body" style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px', maxHeight: '600px', overflowY: 'auto' }}>
         {filtered.map(ws => {
           const st = wsStatus(ws);
           const occupied = occupiedSlots(ws);
@@ -842,12 +852,12 @@ function TeamEntryPanel({ teams, setTeams, showToast, hackId }) {
   return (
     <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ padding: '20px 26px', borderBottom: '1px solid #f1f5f9' }}>
+      <div className="em-section-header" style={{ padding: '20px 26px', borderBottom: '1px solid #f1f5f9' }}>
         <div style={{ fontSize: '17px', fontWeight: 700, color: '#0A1628' }}>Team Entry Tracker</div>
         <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Live check-in status for all registered teams</div>
       </div>
 
-      <div style={{ padding: '22px 26px', flex: 1 }}>
+      <div className="em-section-body" style={{ padding: '22px 26px', flex: 1 }}>
         {/* Progress bar */}
         <div style={{ marginBottom: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px' }}>
@@ -913,12 +923,12 @@ function TeamEntryPanel({ teams, setTeams, showToast, hackId }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
               {absentTeams.map(team => (
-                <div key={team.teamId} style={{ borderLeft: '3px solid #ef4444', background: 'rgba(239,68,68,0.04)', borderRadius: '0 10px 10px 0', padding: '11px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div key={team.teamId} style={{ borderLeft: '3px solid #ef4444', background: 'rgba(239,68,68,0.04)', borderRadius: '0 10px 10px 0', padding: '11px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 700, color: '#0A1628' }}>{team.name}</div>
                     <div style={{ fontSize: '12px', color: '#ef4444' }}>{team.college} · Not yet checked in</div>
                   </div>
-                  <button onClick={() => showToast(`Reminder sent to ${team.name} coordinator`)} style={{ padding: '6px 12px', borderRadius: '8px', background: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <button onClick={() => showToast(`Reminder sent to ${team.name} coordinator`)} style={{ padding: '6px 12px', borderRadius: '8px', background: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     Send Reminder
                   </button>
                 </div>
@@ -1036,6 +1046,8 @@ export default function EventManagement() {
     ? convertDbTimeline(hackathon.timeline)
     : [];
 
+  const isMobile = useIsMobile();
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
       <style>{`
@@ -1054,13 +1066,43 @@ export default function EventManagement() {
         @keyframes dotPulse{0%,100%{box-shadow:0 0 0 3px rgba(30,100,255,0.2),0 0 8px rgba(30,100,255,0.4)}50%{box-shadow:0 0 0 6px rgba(30,100,255,0.1),0 0 16px rgba(30,100,255,0.6)}}
         .hide-scroll::-webkit-scrollbar{display:none;}
         .hide-scroll{-ms-overflow-style:none;scrollbar-width:none;}
+        /* ── Desktop sidebar offset ── */
+        .em-content{transition:padding-left .3s;}
+        .em-content.sb-open{padding-left:240px;}
+        .em-content.sb-closed{padding-left:64px;}
+        /* ── Mobile: no sidebar offset (sidebar is overlay) ── */
+        @media(max-width:768px){
+          .em-content.sb-open,.em-content.sb-closed{padding-left:0!important;padding-top:56px!important;}
+          .em-header-row{flex-direction:column!important;align-items:flex-start!important;}
+          .em-header-clock{align-items:flex-start!important;}
+          .em-ws-header{flex-direction:column!important;align-items:flex-start!important;gap:10px!important;}
+          .em-ws-btns{width:100%;}
+          .em-ws-btn{flex:1;justify-content:center;}
+          .em-summary{flex-direction:column!important;}
+          .em-summary>div{border-right:none!important;border-bottom:1px solid #f1f5f9;}
+          .em-ws-grid{grid-template-columns:1fr!important;}
+          .em-modal-inner{max-height:95vh!important;margin:0!important;border-radius:16px 16px 0 0!important;}
+          .em-modal-wrap{align-items:flex-end!important;padding:0!important;}
+          .em-page-pad{padding:14px 12px 100px!important;}
+          .em-event-header{padding:18px 16px 16px!important;}
+          .em-timeline-node{min-width:100px!important;max-width:120px!important;padding:10px 10px!important;}
+          .em-section-header{padding:16px 16px!important;}
+          .em-section-body{padding:14px!important;}
+          .em-filter-tabs{padding:0 6px!important;}
+          .em-filter-tab{padding:10px 10px!important;font-size:12px!important;}
+          .btn-hover:hover{transform:none;}
+          .ws-card:hover{transform:none;}
+        }
+        @media(max-width:480px){
+          .em-add-form-grid{grid-template-columns:1fr!important;}
+        }
       `}</style>
 
       <OrganizerSidebar open={sbOpen} onToggle={() => setSbOpen(o => !o)} />
       <Toast t={toast} />
 
-      <div style={{ transition: 'padding-left .3s', paddingLeft: sbOpen ? '240px' : '64px' }}>
-        <div style={{ maxWidth: '1320px', margin: '0 auto', padding: '24px 22px 100px' }}>
+      <div className={`em-content ${sbOpen ? 'sb-open' : 'sb-closed'}`}>
+        <div className="em-page-pad" style={{ maxWidth: '1320px', margin: '0 auto', padding: '24px 22px 100px' }}>
 
           {loading ? (
             /* ── Skeleton screen ── */
