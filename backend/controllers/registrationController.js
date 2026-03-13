@@ -442,10 +442,13 @@ const sendShortlistEmails = async (req, res) => {
 /* ─────────────────────────────────────────────────────────────
    POST /api/registrations/publish/:hackathonId
    Marks hackathon results as published (unlocks LiveEvent for students).
+   Also creates / upserts LiveEvent records for every shortlisted student
+   (leader + team members) so they have real event data right away.
 ───────────────────────────────────────────────────────────── */
 const publishResults = async (req, res) => {
   try {
     const id = req.params.hackathonId;
+
     // Resolve hackathon by ObjectId OR slug
     let hackathon = null;
     if (id.match(/^[a-f\d]{24}$/i)) hackathon = await Hackathon.findByIdAndUpdate(id, { resultsPublished: true }, { new: true });
@@ -456,7 +459,94 @@ const publishResults = async (req, res) => {
     if (!hackathon) {
       return res.status(404).json({ success: false, message: 'Hackathon not found.' });
     }
-    res.status(200).json({ success: true, message: 'Results published! Shortlisted students can now access the Live Event page.' });
+
+    // ── Provision LiveEvent records for every shortlisted student ──────────
+    (async () => {
+      try {
+        const LiveEvent = require('../models/LiveEvent');
+        const User      = require('../models/User');
+        const crypto    = require('crypto');
+
+        const shortlistedRegs = await Registration.find({
+          hackathon:   hackathon._id,
+          shortlisted: true,
+        }).lean();
+
+        // Build a list of { userId, teamName } for leaders + all team members
+        const participantPairs = [];
+
+        for (const reg of shortlistedRegs) {
+          // Leader
+          const leaderUser = await User.findOne({
+            email: { $regex: new RegExp(`^${reg.leaderEmail.trim()}$`, 'i') },
+          }).select('_id').lean();
+          if (leaderUser) {
+            participantPairs.push({ userId: leaderUser._id, teamName: reg.teamName });
+          }
+
+          // Members stored directly on the registration document
+          for (const member of (reg.teamMembers || [])) {
+            if (!member.email?.trim()) continue;
+            const memberUser = await User.findOne({
+              email: { $regex: new RegExp(`^${member.email.trim()}$`, 'i') },
+            }).select('_id').lean();
+            if (memberUser) {
+              participantPairs.push({ userId: memberUser._id, teamName: reg.teamName });
+            }
+          }
+
+          // Members who joined via team code (Team model)
+          try {
+            const { Team } = require('../models/Team');
+            const teamDocs = await Team.find({
+              hackathonId:  hackathon._id,
+              leaderEmail:  { $regex: new RegExp(`^${reg.leaderEmail.trim()}$`, 'i') },
+            }).populate('members', '_id').lean();
+            for (const teamDoc of teamDocs) {
+              for (const member of (teamDoc.members || [])) {
+                participantPairs.push({ userId: member._id, teamName: reg.teamName });
+              }
+            }
+          } catch (_) { /* Team model unused — skip */ }
+        }
+
+        // Deduplicate by userId string
+        const seen = new Set();
+        const unique = participantPairs.filter(p => {
+          const key = p.userId.toString();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        // Upsert one LiveEvent per unique student (idempotent — safe to re-publish)
+        for (const { userId, teamName } of unique) {
+          await LiveEvent.findOneAndUpdate(
+            { student: userId, hackathon: hackathon._id },
+            {
+              $setOnInsert: {
+                student:       userId,
+                hackathon:     hackathon._id,
+                isShortlisted: true,
+                teamName,
+                entryQR:       crypto.randomUUID(),
+                mealsQR:       crypto.randomUUID(),
+              },
+            },
+            { upsert: true, new: true }
+          );
+        }
+
+        console.log(`[publishResults] Provisioned LiveEvent records for ${unique.length} participant(s).`);
+      } catch (err) {
+        console.error('[publishResults] LiveEvent upsert error:', err.message);
+      }
+    })();
+
+    res.status(200).json({
+      success: true,
+      message: 'Results published! Shortlisted students can now access the Live Event page.',
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
