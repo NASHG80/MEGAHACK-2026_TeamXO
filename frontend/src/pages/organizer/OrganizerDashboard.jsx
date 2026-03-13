@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   PlusCircle, FileText, CalendarCheck, Award,
   Users, Trophy, CheckCircle2, Clock, Bell,
-  TrendingUp, Calendar, ShieldCheck, ArrowUpRight, Zap, BarChart2,
+  TrendingUp, Calendar, ShieldCheck, ArrowUpRight, Zap, BarChart2, LogOut,
 } from 'lucide-react';
 import axios from 'axios';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
@@ -66,9 +66,19 @@ export default function OrganizerDashboard() {
     setActiveHackathonId(id);
   };
 
+  // Populate user info from localStorage (set during login)
   useEffect(() => {
-    // Fetch all hackathons from the standard public endpoint
-    axios.get('http://localhost:5000/api/hackathons')
+    const name  = localStorage.getItem('hf_name')  || 'Organizer';
+    const email = localStorage.getItem('hf_email') || '';
+    setUser({ name, email });
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('hf_token');
+    // Fetch only THIS organizer's hackathons via the protected endpoint
+    axios.get('http://localhost:5000/api/organizer/hackathons', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then(res => {
         const list = res.data.data || [];
         setHackathons(list);
@@ -105,6 +115,16 @@ export default function OrganizerDashboard() {
             >
               <PlusCircle size={12} /> Create Hackathon
             </Link>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('hf_token');
+                navigate('/');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <LogOut size={12} /> Sign Out
+            </button>
           </div>
         </div>
 

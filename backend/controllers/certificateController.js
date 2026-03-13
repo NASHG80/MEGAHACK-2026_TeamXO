@@ -461,3 +461,36 @@ exports.generatePersonalized = async (req, res) => {
     res.status(500).json({ message: 'Failed to start generation', error: err.message });
   }
 };
+/**
+ * GET /api/certificates/my
+ * Returns all certificates issued to the currently logged-in student.
+ * Matched by recipientEmail == user.email.
+ */
+exports.getMyCertificates = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('email').lean();
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const certs = await Certificate.find({ recipientEmail: user.email })
+      .populate('hackathonId', 'title organizerName')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const result = certs.map(c => ({
+      certificateId:   c.certificateNumber || c._id.toString(),
+      hackathonTitle:  c.hackathonId?.title        || 'Hackathon',
+      organizer:       c.hackathonId?.organizerName || 'Organizer',
+      issueDate:       c.emailSentAt
+                         ? new Date(c.emailSentAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+                         : new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
+      rank:            c.position || (c.recipientType === 'winner' ? 'Winner' : 'Participant'),
+      certificateUrl:  c.fileUrl || null,
+      status:          c.status,
+    }));
+
+    res.json({ certificates: result });
+  } catch (err) {
+    console.error('getMyCertificates error:', err);
+    res.status(500).json({ message: 'Failed to fetch certificates' });
+  }
+};

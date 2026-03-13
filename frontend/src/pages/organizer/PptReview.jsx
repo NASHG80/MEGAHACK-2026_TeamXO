@@ -146,7 +146,7 @@ function SubmissionsPane({ subs, setSubs, showToast, selected, setSelected, onTo
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       })
     ));
-    setSubs(p => p.map(s => (s.aiScore ?? 0) >= threshold ? { ...s, shortlisted: true } : s));
+    setSubs(p => p.map(s => eligible.some(e => e._id === s._id) ? { ...s, shortlisted: true } : s));
     showToast(`${eligible.length} team${eligible.length > 1 ? 's' : ''} auto-shortlisted (≥${threshold})`);
   };
 
@@ -175,7 +175,7 @@ function SubmissionsPane({ subs, setSubs, showToast, selected, setSelected, onTo
           </div>
           <button onClick={autoShortlist}
             className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm shadow-blue-200 whitespace-nowrap">
-            <Star size={11} /> Shortlist {subs.filter(s => s.score >= threshold).length} Teams
+            <Star size={11} /> Shortlist {subs.filter(s => (s.aiScore ?? 0) >= threshold && !s.shortlisted).length} Teams
           </button>
         </div>
       </div>

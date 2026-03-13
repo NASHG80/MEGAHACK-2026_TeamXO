@@ -330,8 +330,8 @@ export default function AdminDashboard() {
               <p className="text-sm font-semibold text-dark leading-tight">Admin</p>
               <p className="text-[11px] text-gray-400">Super Admin</p>
             </div>
-            <button onClick={() => { localStorage.removeItem('hf_token'); navigate('/login'); }}
-              className="ml-2 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer">
+            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('hf_token'); navigate('/'); }}
+              className="ml-2 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer flex items-center gap-1">
               Sign Out
             </button>
           </div>

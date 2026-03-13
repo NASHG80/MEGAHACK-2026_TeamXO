@@ -6,7 +6,6 @@ const {
   assignTeams, 
   removeTeam, 
   toggleTeamMember, 
-  resolveSOS,
   seedEventData
 } = require('../controllers/eventController');
 const { protect, requireRole } = require('../middleware/auth');
@@ -30,8 +29,5 @@ router.delete('/:id/workspaces/:wsId/teams/:teamId', protect, requireRole('organ
 
 // PUT: Toggle team member checked-in status
 router.put('/:id/teams/:teamId/member', protect, requireRole('organizer', 'admin'), toggleTeamMember);
-
-// PUT: Resolve an SOS request
-router.put('/:id/sos/:sosId/resolve', protect, requireRole('organizer', 'admin'), resolveSOS);
 
 module.exports = router;

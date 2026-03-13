@@ -34,6 +34,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 app.use("/api/auth",              require("./routes/auth"));
 app.use("/api/live-event",        require("./routes/liveEvent"));
+app.use("/api/event",             require("./routes/eventAssignRoutes"));
 app.use("/api/hackathons",        require("./routes/hackathonRoutes"));
 app.use("/api/organizer/hackathons", require("./routes/organizerHackathonRoutes"));
 app.use("/api/organizer/events",  require("./routes/eventRoutes"));
@@ -43,6 +44,7 @@ app.use("/api/registrations",     require("./routes/registrationRoutes"));
 app.use("/api/teams",             require("./routes/teamRoutes"));
 app.use("/api",                   require("./routes/verification"));   // mounts /api/organizer/verification + /api/admin/*
 app.use("/api/registrations",     require("./routes/registrationRoutes"));
+
 
 // Health check
 app.get("/",           (req, res) => res.json({ status: "HackFlow API running 🚀" }));
