@@ -62,6 +62,56 @@ const cardUp = {
   }),
 };
 
+/* ═══════════ TIMELINE CONVERTER (same logic as EventManagement.jsx) ═══════════ */
+function convertDbTimeline(dbItems) {
+  if (!dbItems || dbItems.length === 0) return [];
+  const now      = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const nowMs    = now.getTime();
+
+  return dbItems.map((item, i) => {
+    let startMs = null;
+    if (item.date && item.time) {
+      const dt = new Date(`${item.date}T${item.time}`);
+      if (!isNaN(dt.getTime())) startMs = dt.getTime();
+    } else if (item.time) {
+      const dt = new Date(`${todayStr}T${item.time}`);
+      if (!isNaN(dt.getTime())) startMs = dt.getTime();
+    }
+
+    let status = 'upcoming';
+    if (startMs !== null) {
+      const next   = dbItems[i + 1];
+      let nextMs   = null;
+      if (next?.date && next?.time) {
+        const nd = new Date(`${next.date}T${next.time}`);
+        if (!isNaN(nd.getTime())) nextMs = nd.getTime();
+      } else if (next?.time) {
+        const nd = new Date(`${todayStr}T${next.time}`);
+        if (!isNaN(nd.getTime())) nextMs = nd.getTime();
+      }
+      if (nextMs !== null && nowMs >= nextMs) status = 'done';
+      else if (nowMs >= startMs) status = 'active';
+    }
+
+    // Format time display
+    let displayTime = item.time || 'TBD';
+    if (item.time && item.time.includes(':')) {
+      const [hStr, mStr] = item.time.split(':');
+      const h = parseInt(hStr, 10);
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      displayTime = `${String(h12).padStart(2,'0')}:${mStr.padStart(2,'0')} ${suffix}`;
+    }
+    if (item.date) {
+      const d = new Date(item.date + 'T00:00:00');
+      const dateLabel = isNaN(d) ? item.date : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      displayTime = `${dateLabel} · ${displayTime}`;
+    }
+    return { id: item._id || i, time: displayTime, label: item.title, description: item.description, status };
+  });
+}
+
 /* ═══════════ PROGRESS TRACKER ═══════════ */
 function ProgressTracker({ entry, lunch, dinner }) {
   const steps = [
@@ -861,41 +911,61 @@ export default function LiveEvent() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-dark">Event Schedule</h3>
-                <p className="text-[10px] text-gray-400">Full day hackathon timeline</p>
+                <p className="text-[10px] text-gray-400">Live timeline set by the organizer</p>
               </div>
             </div>
-            <div className="space-y-0">
-              {[
-                { time: '09:00 AM', label: 'Gate Entry',           icon: DoorOpen,      active: true },
-                { time: '10:00 AM', label: 'Opening Ceremony',     icon: Sparkles,      active: false },
-                { time: '10:30 AM', label: 'Hacking Begins',       icon: CircleDot,     active: false },
-                { time: '01:30 PM', label: 'Lunch Break',          icon: Coffee,        active: false },
-                { time: '05:00 PM', label: 'Submission Deadline',  icon: AlertTriangle, active: false },
-                { time: '06:00 PM', label: 'Final Presentations',  icon: Megaphone,     active: false },
-                { time: '07:30 PM', label: 'Dinner',               icon: Utensils,      active: false },
-                { time: '08:30 PM', label: 'Winners Announcement', icon: Sparkles,      active: false },
-              ].map(({ time, label, icon: I, active }, idx, arr) => (
-                <motion.div key={idx}
-                  initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 + idx * 0.06 }}
-                  className={`flex items-start gap-3 relative group
-                    ${active ? '' : 'hover:bg-gray-50/50'} rounded-lg transition-colors`}
-                >
-                  {idx < arr.length - 1 && <div className="absolute left-[15px] top-8 w-px h-full bg-gray-100" />}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-colors
-                    ${active
-                      ? 'bg-royal text-white shadow-md shadow-royal/25'
-                      : 'bg-gray-100 text-gray-400 group-hover:bg-royal/10 group-hover:text-royal'
-                    }`}>
-                    <I size={14} />
+
+            {(() => {
+              const tl = convertDbTimeline(event.timeline || []);
+              if (tl.length === 0) return (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+                    <Clock size={20} className="text-gray-300" />
                   </div>
-                  <div className="pb-4 pt-1">
-                    <p className={`text-[10px] font-bold ${active ? 'text-royal' : 'text-gray-400'}`}>{time}</p>
-                    <p className={`text-xs font-semibold ${active ? 'text-dark' : 'text-gray-500'}`}>{label}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  <p className="text-xs font-semibold text-gray-400">Schedule not set yet</p>
+                  <p className="text-[10px] text-gray-300 mt-0.5">The organizer hasn't published a timeline</p>
+                </div>
+              );
+              return (
+                <div className="space-y-0">
+                  {tl.map((t, idx) => {
+                    const done   = t.status === 'done';
+                    const active = t.status === 'active';
+                    return (
+                      <motion.div key={t.id}
+                        initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4 + idx * 0.06 }}
+                        className={`flex items-start gap-3 relative group ${
+                          active ? '' : 'hover:bg-gray-50/50'
+                        } rounded-lg transition-colors`}
+                      >
+                        {idx < tl.length - 1 && <div className="absolute left-[15px] top-8 w-px h-full bg-gray-100" />}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-all
+                          ${ done   ? 'bg-emerald-500 text-white'
+                           : active ? 'bg-royal text-white shadow-md shadow-royal/25 ring-4 ring-royal/10'
+                           :          'bg-gray-100 text-gray-400 group-hover:bg-royal/10 group-hover:text-royal'}`}>
+                          {done ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                        </div>
+                        <div className="pb-4 pt-1 flex-1">
+                          <p className={`text-[10px] font-bold ${
+                            done ? 'text-emerald-500' : active ? 'text-royal' : 'text-gray-400'
+                          }`}>{t.time}</p>
+                          <p className={`text-xs font-semibold ${
+                            done ? 'text-gray-400 line-through' : active ? 'text-dark' : 'text-gray-500'
+                          }`}>{t.label}</p>
+                          {t.description && <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed">{t.description}</p>}
+                          {active && (
+                            <span className="inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-royal bg-royal/8 px-2 py-0.5 rounded-full">
+                              <span className="w-1.5 h-1.5 rounded-full bg-royal animate-pulse" /> LIVE NOW
+                            </span>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </motion.div>
         </div>
 

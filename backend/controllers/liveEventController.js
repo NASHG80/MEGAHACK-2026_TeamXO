@@ -16,7 +16,7 @@ exports.getMyLiveEvent = async (req, res) => {
     const EventWorkspace = require('../models/EventWorkspace');
 
     const event = await LiveEvent.findOne({ student: req.user.id })
-      .populate('hackathon', 'title organizerName venue date time status slug')
+      .populate('hackathon', 'title organizerName venue date time status slug timeline')
       .populate('student', 'name email');
 
     if (!event) {
@@ -89,6 +89,7 @@ exports.getMyLiveEvent = async (req, res) => {
       mealsQR:           event.mealsQR,
       hackathonStatus:   event.hackathon.status,
       feedbackSubmitted: event.feedbackSubmitted,
+      timeline:          event.hackathon.timeline || [],
     });
   } catch (err) {
     console.error('getMyLiveEvent error:', err);
