@@ -8,13 +8,13 @@ const PHASES = ['Check-In', 'Hacking', 'Lunch', 'Judging', 'Dinner', 'Results'];
 
 // Fallback hardcoded timeline (used when no custom timeline is set)
 const TIMELINE_DEF = [
-  { id: 1, startMin: 9*60,    time: '09:00 AM', label: 'Registration & Check-In Opens' },
-  { id: 2, startMin: 10*60,   time: '10:00 AM', label: 'Hacking Begins' },
-  { id: 3, startMin: 13*60,   time: '01:00 PM', label: 'Lunch Distribution' },
-  { id: 4, startMin: 16*60,   time: '04:00 PM', label: 'Submission Deadline' },
-  { id: 5, startMin: 17*60,   time: '05:00 PM', label: 'Judging Panel Begins' },
-  { id: 6, startMin: 19*60,   time: '07:00 PM', label: 'Dinner Distribution' },
-  { id: 7, startMin: 20*60,   time: '08:00 PM', label: 'Results & Prize Distribution' },
+  { id: 1, startMin: 9 * 60, time: '09:00 AM', label: 'Registration & Check-In Opens' },
+  { id: 2, startMin: 10 * 60, time: '10:00 AM', label: 'Hacking Begins' },
+  { id: 3, startMin: 13 * 60, time: '01:00 PM', label: 'Lunch Distribution' },
+  { id: 4, startMin: 16 * 60, time: '04:00 PM', label: 'Submission Deadline' },
+  { id: 5, startMin: 17 * 60, time: '05:00 PM', label: 'Judging Panel Begins' },
+  { id: 6, startMin: 19 * 60, time: '07:00 PM', label: 'Dinner Distribution' },
+  { id: 7, startMin: 20 * 60, time: '08:00 PM', label: 'Results & Prize Distribution' },
 ];
 
 /* ── Derive timeline statuses from current time (for fallback TIMELINE_DEF) ── */
@@ -183,10 +183,10 @@ function EventHeader({ hackId, hackathon, timeline }) {
 
       {/* ── Horizontal scrollable timeline ── */}
       <div ref={timelineRef} style={{ display: 'flex', gap: '0', overflowX: 'auto', paddingBottom: '4px' }}
-           className="hide-scroll">
+        className="hide-scroll">
         {timeline.map((t, i) => {
           const done = t.status === 'done';
-          const act  = t.status === 'active';
+          const act = t.status === 'active';
           const isLast = i === timeline.length - 1;
 
           return (
@@ -220,7 +220,7 @@ function EventHeader({ hackId, hackathon, timeline }) {
                 }}>
                   {done && (
                     <svg width="6" height="6" viewBox="0 0 9 9" fill="none">
-                      <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   )}
                 </div>
@@ -265,12 +265,12 @@ function EventHeader({ hackId, hackathon, timeline }) {
 /* ═══════════════════════ SECTION 1 — WORKSPACE ASSIGNMENT ═══════════════════════ */
 function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId }) {
   const [statusFilter, setStatusFilter] = useState('All');
-  const [showAdd, setShowAdd]           = useState(false);
-  const [assigningId, setAssigningId]   = useState(null);
-  const [assignForm, setAssignForm]     = useState({});
-  const [newWS, setNewWS]               = useState({ floor: '', type: 'Lab', number: '', capacity: '', note: '' });
+  const [showAdd, setShowAdd] = useState(false);
+  const [assigningId, setAssigningId] = useState(null);
+  const [assignForm, setAssignForm] = useState({});
+  const [newWS, setNewWS] = useState({ floor: '', type: 'Lab', number: '', capacity: '', note: '' });
   const [showAutoModal, setShowAutoModal] = useState(false);
-  const [autoPreview, setAutoPreview]     = useState([]);   // [{team, wsId, wsNumber, slots[]}]
+  const [autoPreview, setAutoPreview] = useState([]);   // [{team, wsId, wsNumber, slots[]}]
 
   /* ---- helpers ---- */
   const assignedTeamIds = workspaces.flatMap(w => w.assignedTeams.map(t => t.teamId));
@@ -333,7 +333,7 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
     const wsPool = workspaces
       .map(w => {
         const taken = occupiedSlots(w);
-        const free  = Array.from({ length: w.workstations }, (_, i) => i).filter(i => !taken.has(i));
+        const free = Array.from({ length: w.workstations }, (_, i) => i).filter(i => !taken.has(i));
         return { id: w.id, number: w.number, floor: w.floor, freeSlots: free };
       })
       .filter(w => w.freeSlots.length > 0)
@@ -363,7 +363,7 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
   const handleAutoConfirm = async () => {
     if (autoPreview.length === 0) return;
     const token = localStorage.getItem('hf_token');
-    
+
     // Map to the format expected by the backend assign API
     const assignments = autoPreview.map(a => ({
       wsId: a.wsId,
@@ -420,11 +420,11 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
     const { teamId, selectedSlots } = assignForm;
     if (!teamId || selectedSlots.size === 0) return;
     const team = teams.find(t => t.teamId === teamId);
-    const ws   = workspaces.find(w => w.workspaceId === wsId);
+    const ws = workspaces.find(w => w.workspaceId === wsId);
     const slots = [...selectedSlots].sort((a, b) => a - b);
-    
+
     const token = localStorage.getItem('hf_token');
-    
+
     try {
       const res = await fetch(`http://localhost:5000/api/organizer/events/${hackId}/workspaces/assign`, {
         method: 'PUT',
@@ -432,14 +432,14 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           assignments: [{
             wsId,
             teamId: team.teamId,
             teamName: team.name,
             college: team.college,
             slots
-          }] 
+          }]
         })
       });
       if (res.ok) {
@@ -475,14 +475,14 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
   };
 
   /* ---- status colors ---- */
-  const DOT    = { available: '#22c55e', partial: '#f59e0b', full: '#ef4444' };
-  const BG     = { available: '#f0fdf4', partial: 'rgba(245,158,11,0.04)', full: 'rgba(239,68,68,0.04)' };
-  const BORDER = { available: '#dcfce7', partial: 'rgba(245,158,11,0.15)',  full: 'rgba(239,68,68,0.12)' };
-  const LBORDER= { available: '#22c55e', partial: '#f59e0b',                full: '#ef4444' };
+  const DOT = { available: '#22c55e', partial: '#f59e0b', full: '#ef4444' };
+  const BG = { available: '#f0fdf4', partial: 'rgba(245,158,11,0.04)', full: 'rgba(239,68,68,0.04)' };
+  const BORDER = { available: '#dcfce7', partial: 'rgba(245,158,11,0.15)', full: 'rgba(239,68,68,0.12)' };
+  const LBORDER = { available: '#22c55e', partial: '#f59e0b', full: '#ef4444' };
 
   /* ---- summary counts ---- */
-  const statCounts  = workspaces.reduce((acc, w) => { const s = wsStatus(w); acc[s] = (acc[s]||0)+1; return acc; }, {});
-  const totalWS     = workspaces.reduce((s, w) => s + w.workstations, 0);
+  const statCounts = workspaces.reduce((acc, w) => { const s = wsStatus(w); acc[s] = (acc[s] || 0) + 1; return acc; }, {});
+  const totalWS = workspaces.reduce((s, w) => s + w.workstations, 0);
   const allocatedWS = workspaces.reduce((s, w) => s + w.assignedTeams.reduce((a, t) => a + t.slots.length, 0), 0);
 
   return (
@@ -575,9 +575,14 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Assign teams manually or auto-assign all at once · click chips to pick individual workstations</div>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {unassignedTeams.length > 0 && (
+          {unassignedTeams.length > 0 ? (
             <button onClick={openAutoModal} className="btn-hover"
               style={{ padding: '9px 18px', borderRadius: '10px', background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px' }}>
+              <span style={{ fontSize: '16px', lineHeight: 1 }}>⚡</span> Auto Assign
+            </button>
+          ) : (
+            <button disabled
+              style={{ padding: '9px 18px', borderRadius: '10px', background: '#e2e8f0', color: '#94a3b8', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '7px' }}>
               <span style={{ fontSize: '16px', lineHeight: 1 }}>⚡</span> Auto Assign
             </button>
           )}
@@ -591,8 +596,8 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       <div style={{ display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
         {[
           ['Available', statCounts.available || 0, '#22c55e'],
-          ['Partial',   statCounts.partial   || 0, '#f59e0b'],
-          ['Full',      statCounts.full      || 0, '#ef4444'],
+          ['Partial', statCounts.partial || 0, '#f59e0b'],
+          ['Full', statCounts.full || 0, '#ef4444'],
         ].map(([label, count, color]) => (
           <div key={label} style={{ padding: '11px 22px', display: 'flex', alignItems: 'center', gap: '7px', borderRight: '1px solid #f1f5f9' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, display: 'inline-block' }} />
@@ -650,13 +655,13 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       {/* ── Workspace cards ── */}
       <div style={{ padding: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px', maxHeight: '600px', overflowY: 'auto' }}>
         {filtered.map(ws => {
-          const st       = wsStatus(ws);
+          const st = wsStatus(ws);
           const occupied = occupiedSlots(ws);
-          const usedCount= occupied.size;
-          const avail    = ws.workstations - usedCount;
-          const pct      = ws.workstations > 0 ? Math.round((usedCount / ws.workstations) * 100) : 0;
+          const usedCount = occupied.size;
+          const avail = ws.workstations - usedCount;
+          const pct = ws.workstations > 0 ? Math.round((usedCount / ws.workstations) * 100) : 0;
           const isAssigning = assigningId === ws.workspaceId;
-          const pickable    = unassignedTeams;
+          const pickable = unassignedTeams;
 
           return (
             <div key={ws.workspaceId} className="ws-card"
@@ -709,14 +714,14 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '14px' }}>
                 {Array.from({ length: ws.workstations }, (_, i) => {
-                  const isOccupied  = occupied.has(i);
-                  const isSelected  = isAssigning && assignForm.selectedSlots?.has(i);
+                  const isOccupied = occupied.has(i);
+                  const isSelected = isAssigning && assignForm.selectedSlots?.has(i);
                   const isClickable = isAssigning && !isOccupied;
 
                   let bg, color, border;
-                  if (isOccupied)       { bg = 'rgba(30,100,255,0.12)'; color = '#1E64FF'; border = 'rgba(30,100,255,0.2)'; }
-                  else if (isSelected)  { bg = 'rgba(34,197,94,0.15)';  color = '#16a34a'; border = 'rgba(34,197,94,0.3)'; }
-                  else                  { bg = '#f1f5f9';               color = '#94a3b8'; border = '#e2e8f0'; }
+                  if (isOccupied) { bg = 'rgba(30,100,255,0.12)'; color = '#1E64FF'; border = 'rgba(30,100,255,0.2)'; }
+                  else if (isSelected) { bg = 'rgba(34,197,94,0.15)'; color = '#16a34a'; border = 'rgba(34,197,94,0.3)'; }
+                  else { bg = '#f1f5f9'; color = '#94a3b8'; border = '#e2e8f0'; }
 
                   return (
                     <span key={i}
@@ -777,12 +782,12 @@ function TeamEntryPanel({ teams, setTeams, showToast, hackId }) {
   const [expandedTeam, setExpandedTeam] = useState(null);
 
   const enteredTeams = teams.filter(t => t.entered);
-  const absentTeams  = teams.filter(t => !t.entered);
+  const absentTeams = teams.filter(t => !t.entered);
 
   const toggleMember = async (teamId, member, currentStatus) => {
     const newStatus = currentStatus === 'absent' ? 'present' : 'absent';
     const token = localStorage.getItem('hf_token');
-    
+
     try {
       const res = await fetch(`http://localhost:5000/api/organizer/events/${hackId}/teams/${teamId}/member`, {
         method: 'PUT',
@@ -851,7 +856,7 @@ function TeamEntryPanel({ teams, setTeams, showToast, hackId }) {
                   {expandedTeam === team.teamId && (
                     <div style={{ background: '#fafafa', borderRadius: '0 0 10px 10px', padding: '10px 14px', animation: 'slideDown .2s ease' }}>
                       {team.memberNames.map(member => {
-                        const st  = team.memberStatus?.[member] || 'absent';
+                        const st = team.memberStatus?.[member] || 'absent';
                         return (
                           <div key={member} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                             <span style={{ fontSize: '13px', color: '#334155' }}>{member}</span>
@@ -895,88 +900,19 @@ function TeamEntryPanel({ teams, setTeams, showToast, hackId }) {
   );
 }
 
-/* ═══════════════════════ SECTION 2b — SOS PANEL ═══════════════════════ */
-function SOSPanel({ sosRequests, setSosRequests, showToast, hackId }) {
-  const resolveSOS = async (sosId) => {
-    const token = localStorage.getItem('hf_token');
-    try {
-      const res = await fetch(`http://localhost:5000/api/organizer/events/${hackId}/sos/${sosId}/resolve`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setSosRequests(p => p.filter(r => r.sosId !== sosId));
-        showToast('SOS request resolved');
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Error resolving SOS');
-    }
-  };
-
-  return (
-    <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ padding: '20px 26px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '17px', fontWeight: 700, color: '#0A1628', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={16} style={{ color: sosRequests.length > 0 ? '#ef4444' : '#94a3b8' }} />
-            SOS Help Requests
-          </div>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Real-time help requests from participants</div>
-        </div>
-        {sosRequests.length > 0 && (
-          <span style={{ background: '#ef4444', color: '#fff', borderRadius: '20px', padding: '3px 12px', fontSize: '13px', fontWeight: 800, flexShrink: 0 }}>{sosRequests.length}</span>
-        )}
-      </div>
-
-      <div style={{ padding: '22px 26px', flex: 1 }}>
-        {sosRequests.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 0', color: '#94a3b8' }}>
-            <CheckCircle2 size={32} style={{ marginBottom: '10px', color: '#22c55e' }} />
-            <div style={{ fontSize: '15px', fontWeight: 700, color: '#22c55e' }}>All clear</div>
-            <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>No active SOS requests</div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {sosRequests.map(r => (
-              <div key={r.sosId} style={{ background: 'rgba(239,68,68,0.04)', borderRadius: '0 14px 14px 0', padding: '14px 16px', border: '1px solid rgba(239,68,68,0.1)', borderLeft: '4px solid #ef4444' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#0A1628', marginBottom: '3px' }}>
-                      {r.name} <span style={{ fontSize: '12px', fontWeight: 500, color: '#94a3b8' }}>· {r.workspace}</span>
-                    </div>
-                    <div style={{ fontSize: '13px', color: '#ef4444', fontStyle: 'italic', marginBottom: '4px' }}>"{r.message}"</div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>{r.time}</div>
-                  </div>
-                  <button onClick={() => resolveSOS(r.sosId)}
-                    style={{ padding: '7px 15px', borderRadius: '9px', background: 'rgba(34,197,94,0.1)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.2)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    Resolve
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ═══════════════════════ MAIN ═══════════════════════ */
 export default function EventManagement() {
   const { id: hackathonIdParam } = useParams();
   const hackathonSlug = hackathonIdParam || null;
-  
-  const [sbOpen, setSbOpen]           = useState(true);
-  const [workspaces, setWorkspaces]   = useState([]);
-  const [teams, setTeams]             = useState([]);
-  const [sosRequests, setSosRequests] = useState([]);
-  const [hackathon, setHackathon]     = useState(null);
-  const [loading, setLoading]         = useState(true);
+
+  const [sbOpen, setSbOpen] = useState(true);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [hackathon, setHackathon] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [resolvedSlug, setResolvedSlug] = useState(null); // actual slug used for event API
-  const [toast, setToast]             = useState(null);
-  const [timeline, setTimeline]       = useState(() => computeTimeline(nowMinutes()));
+  const [toast, setToast] = useState(null);
+  const [timeline, setTimeline] = useState(() => computeTimeline(nowMinutes()));
 
   useEffect(() => {
     setTimeline(computeTimeline(nowMinutes()));
@@ -1006,7 +942,6 @@ export default function EventManagement() {
         const data = await res.json();
         setWorkspaces(data.workspaces || []);
         setTeams(data.teams || []);
-        setSosRequests(data.sosRequests || []);
       }
     } catch (err) {
       console.error(err);
@@ -1044,7 +979,7 @@ export default function EventManagement() {
   useEffect(() => {
     fetchData();
     const iv = setInterval(() => {
-      // Only refresh event data (workspaces/teams/SOS) — not the heavy hackathon detail
+      // Refresh workspaces/teams — not the heavy hackathon detail
       if (resolvedSlug) loadEventData(resolvedSlug);
     }, 15_000);
     return () => clearInterval(iv);
@@ -1115,12 +1050,12 @@ export default function EventManagement() {
                   <div className="skel" style={{ height: '14px', width: '100px' }} />
                 </div>
                 <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '20px', paddingTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-                  {[1,2,3,4].map(i => <div key={i} className="skel" style={{ height: '48px' }} />)}
+                  {[1, 2, 3, 4].map(i => <div key={i} className="skel" style={{ height: '48px' }} />)}
                 </div>
               </div>
               {/* Workspace skeleton */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-                {[1,2,3].map(i => (
+                {[1, 2, 3].map(i => (
                   <div key={i} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
                     <div className="skel" style={{ height: '16px', width: '80px', marginBottom: '12px' }} />
                     <div className="skel" style={{ height: '12px', width: '120px', marginBottom: '8px' }} />
@@ -1133,10 +1068,7 @@ export default function EventManagement() {
             <>
               <EventHeader hackId={effectiveId} hackathon={hackathon} timeline={displayTimeline} />
               <WorkspaceSection workspaces={workspaces} setWorkspaces={setWorkspaces} teams={teams} showToast={showToast} hackId={effectiveId} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
-                <TeamEntryPanel teams={teams} setTeams={setTeams} showToast={showToast} hackId={effectiveId} />
-                <SOSPanel sosRequests={sosRequests} setSosRequests={setSosRequests} showToast={showToast} hackId={effectiveId} />
-              </div>
+              <TeamEntryPanel teams={teams} setTeams={setTeams} showToast={showToast} hackId={effectiveId} />
             </>
           )}
         </div>

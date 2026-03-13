@@ -138,6 +138,7 @@ function ScanStatusRow({ icon: Icon, label, status, iconBg, onSimulate }) {
 export default function LiveEvent() {
   const [event, setEvent] = useState(FALLBACK_EVENT);
   const [loading, setLoading] = useState(true);
+  const [workspaceAssigning, setWorkspaceAssigning] = useState(false);
 
   /* Helper to get auth headers */
   const getHeaders = () => {
@@ -174,6 +175,37 @@ export default function LiveEvent() {
         }
 
         setEvent(merged);
+
+        // Auto-assign workspace if not yet assigned
+        if (!merged.workspaceNumber) {
+          setWorkspaceAssigning(true);
+          try {
+            const token = localStorage.getItem('hf_token');
+            const wsRes = await fetch('http://localhost:5000/api/event/assign-workspace', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                studentId: merged.studentId,
+                hackathonId: merged.hackathonId,
+              }),
+            });
+            if (wsRes.ok) {
+              const wsData = await wsRes.json();
+              setEvent(prev => ({
+                ...prev,
+                workspaceNumber: wsData.workspaceNumber ?? prev.workspaceNumber,
+                workspaceLocation: wsData.workspaceLocation ?? prev.workspaceLocation,
+              }));
+            }
+          } catch {
+            // silent — workspace will remain from fallback
+          } finally {
+            setWorkspaceAssigning(false);
+          }
+        }
       } catch {
         // Keep fallback data
       } finally {
@@ -474,7 +506,20 @@ export default function LiveEvent() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Workspace Number</p>
-                  <p className="text-3xl font-extrabold text-royal tracking-tight">{event.workspaceNumber}</p>
+                  {workspaceAssigning ? (
+                    <div className="flex items-center gap-2">
+                      <motion.div
+                        animate={{ opacity: [1, 0.4, 1] }}
+                        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                        className="h-9 w-24 rounded-lg bg-gray-200"
+                      />
+                      <span className="text-xs text-gray-400 font-medium">Assigning…</span>
+                    </div>
+                  ) : (
+                    <p className="text-3xl font-extrabold text-royal tracking-tight">
+                      {event.workspaceNumber || '—'}
+                    </p>
+                  )}
                 </div>
                 <div className="w-14 h-14 rounded-2xl bg-royal/10 flex items-center justify-center">
                   <MapPin size={24} className="text-royal" />

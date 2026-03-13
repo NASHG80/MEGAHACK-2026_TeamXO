@@ -1,8 +1,8 @@
-const LiveEvent  = require('../models/LiveEvent');
-const Hackathon  = require('../models/Hackathon');
-const EventSOS   = require('../models/EventSOS');
-const User       = require('../models/User');
-const crypto     = require('crypto');
+const LiveEvent    = require('../models/LiveEvent');
+const Hackathon    = require('../models/Hackathon');
+const HelpRequest  = require('../models/HelpRequest');
+const User         = require('../models/User');
+const crypto       = require('crypto');
 
 /* ───────────────────────────────────────────
    GET /api/live-event/me
@@ -11,33 +11,33 @@ const crypto     = require('crypto');
 exports.getMyLiveEvent = async (req, res) => {
   try {
     const event = await LiveEvent.findOne({ student: req.user.id })
-      .populate("hackathon", "title organizerName venue date time")
-      .populate("student", "name email");
+      .populate('hackathon', 'title organizerName venue date time')
+      .populate('student', 'name email');
 
     if (!event) {
-      return res.status(404).json({ message: "No live event found for this student" });
+      return res.status(404).json({ message: 'No live event found for this student' });
     }
 
     res.json({
-      studentId: event.student._id,
-      studentName: event.student.name,
-      teamName: event.teamName,
-      hackathonId: event.hackathon._id,
-      hackathonName: event.hackathon.title,
-      venue: event.hackathon.venue,
-      date: event.hackathon.date,
-      time: event.hackathon.time,
-      workspaceNumber: event.workspaceNumber,
+      studentId:         event.student._id,
+      studentName:       event.student.name,
+      teamName:          event.teamName,
+      hackathonId:       event.hackathon._id,
+      hackathonName:     event.hackathon.title,
+      venue:             event.hackathon.venue,
+      date:              event.hackathon.date,
+      time:              event.hackathon.time,
+      workspaceNumber:   event.workspaceNumber,
       workspaceLocation: event.workspaceLocation,
-      entryStatus: event.entryStatus,
-      lunchStatus: event.lunchStatus,
-      dinnerStatus: event.dinnerStatus,
-      entryQR: event.entryQR,
-      mealsQR: event.mealsQR,
+      entryStatus:       event.entryStatus,
+      lunchStatus:       event.lunchStatus,
+      dinnerStatus:      event.dinnerStatus,
+      entryQR:           event.entryQR,
+      mealsQR:           event.mealsQR,
     });
   } catch (err) {
-    console.error("getMyLiveEvent error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error('getMyLiveEvent error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -53,8 +53,8 @@ exports.checkShortlisted = async (req, res) => {
     });
     res.json({ isShortlisted: !!event });
   } catch (err) {
-    console.error("checkShortlisted error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error('checkShortlisted error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -68,149 +68,112 @@ exports.scanQR = async (req, res) => {
     const { qrToken, type } = req.body;
 
     if (!qrToken || !type) {
-      return res.status(400).json({ message: "qrToken and type are required" });
+      return res.status(400).json({ message: 'qrToken and type are required' });
     }
 
-    // Find event by QR token
     let event;
-    if (type === "entry") {
+    if (type === 'entry') {
       event = await LiveEvent.findOne({ entryQR: qrToken });
-    } else if (type === "meals") {
+    } else if (type === 'meals') {
       event = await LiveEvent.findOne({ mealsQR: qrToken });
     } else {
       return res.status(400).json({ message: "type must be 'entry' or 'meals'" });
     }
 
     if (!event) {
-      return res.status(404).json({ message: "Invalid QR code" });
+      return res.status(404).json({ message: 'Invalid QR code' });
     }
 
-    // Update status
-    if (type === "entry") {
-      event.entryStatus = "Entered";
+    if (type === 'entry') {
+      event.entryStatus = 'Entered';
     } else {
-      event.lunchStatus = "Claimed";
-      event.dinnerStatus = "Claimed";
+      event.lunchStatus  = 'Claimed';
+      event.dinnerStatus = 'Claimed';
     }
 
     await event.save();
 
-    // Return the student info for organizer feedback
-    const student = await User.findById(event.student).select("name email");
+    const student = await User.findById(event.student).select('name email');
 
     res.json({
-      message: `${type === "entry" ? "Entry" : "Meal"} scan successful`,
-      studentName: student?.name || "Unknown",
-      studentEmail: student?.email || "",
-      entryStatus: event.entryStatus,
-      lunchStatus: event.lunchStatus,
+      message:     `${type === 'entry' ? 'Entry' : 'Meal'} scan successful`,
+      studentName:  student?.name  || 'Unknown',
+      studentEmail: student?.email || '',
+      entryStatus:  event.entryStatus,
+      lunchStatus:  event.lunchStatus,
       dinnerStatus: event.dinnerStatus,
     });
   } catch (err) {
-    console.error("scanQR error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error('scanQR error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
 /* ───────────────────────────────────────────
    POST /api/live-event/self-scan
    Student scans a QR code placed at the venue.
-   The participant is identified via session.
    Body: { hackathonId, action: 'entry'|'lunch'|'dinner' }
-
-   Responses:
-     200 — success  { success, action, message, entryStatus, lunchStatus, dinnerStatus }
-     409 — duplicate { success:false, code:'DUPLICATE', message }
-     400 — bad QR    { success:false, code:'INVALID_QR', message }
-     404 — no record { success:false, code:'NOT_REGISTERED', message }
    ─────────────────────────────────────────── */
 exports.selfScan = async (req, res) => {
   try {
     const { hackathonId, action } = req.body;
 
-    // Validate action
-    const VALID_ACTIONS = ["entry", "lunch", "dinner"];
+    const VALID_ACTIONS = ['entry', 'lunch', 'dinner'];
     if (!hackathonId || !action || !VALID_ACTIONS.includes(action)) {
       return res.status(400).json({
         success: false,
-        code: "INVALID_QR",
-        message: "This QR code is not valid for this event.",
+        code:    'INVALID_QR',
+        message: 'This QR code is not valid for this event.',
       });
     }
 
-    // Find this student's participation record for that hackathon
     const event = await LiveEvent.findOne({
-      student: req.user.id,
+      student:   req.user.id,
       hackathon: hackathonId,
     });
 
     if (!event) {
       return res.status(404).json({
         success: false,
-        code: "NOT_REGISTERED",
-        message: "You are not registered for this event.",
+        code:    'NOT_REGISTERED',
+        message: 'You are not registered for this event.',
       });
     }
 
-    // ── Duplicate scan prevention ──────────────────────────────────
-    if (action === "entry" && event.entryStatus === "Entered") {
-      return res.status(409).json({
-        success: false,
-        code: "DUPLICATE",
-        action,
-        message: "Entry has already been recorded for you.",
-        entryStatus: event.entryStatus,
-        lunchStatus: event.lunchStatus,
-        dinnerStatus: event.dinnerStatus,
-      });
+    // Duplicate scan prevention
+    if (action === 'entry' && event.entryStatus === 'Entered') {
+      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'Entry has already been recorded for you.', entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
     }
-    if (action === "lunch" && event.lunchStatus === "Claimed") {
-      return res.status(409).json({
-        success: false,
-        code: "DUPLICATE",
-        action,
-        message: "You have already claimed lunch.",
-        entryStatus: event.entryStatus,
-        lunchStatus: event.lunchStatus,
-        dinnerStatus: event.dinnerStatus,
-      });
+    if (action === 'lunch' && event.lunchStatus === 'Claimed') {
+      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'You have already claimed lunch.',           entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
     }
-    if (action === "dinner" && event.dinnerStatus === "Claimed") {
-      return res.status(409).json({
-        success: false,
-        code: "DUPLICATE",
-        action,
-        message: "You have already claimed dinner.",
-        entryStatus: event.entryStatus,
-        lunchStatus: event.lunchStatus,
-        dinnerStatus: event.dinnerStatus,
-      });
+    if (action === 'dinner' && event.dinnerStatus === 'Claimed') {
+      return res.status(409).json({ success: false, code: 'DUPLICATE', action, message: 'You have already claimed dinner.',          entryStatus: event.entryStatus, lunchStatus: event.lunchStatus, dinnerStatus: event.dinnerStatus });
     }
 
-    // ── Apply update ───────────────────────────────────────────────
     const successMessages = {
-      entry:  "Entry successfully recorded! Welcome to the hackathon.",
-      lunch:  "Lunch claimed successfully! Enjoy your meal.",
-      dinner: "Dinner claimed successfully! Enjoy your meal.",
+      entry:  'Entry successfully recorded! Welcome to the hackathon.',
+      lunch:  'Lunch claimed successfully! Enjoy your meal.',
+      dinner: 'Dinner claimed successfully! Enjoy your meal.',
     };
 
-    if (action === "entry")  event.entryStatus  = "Entered";
-    if (action === "lunch")  event.lunchStatus  = "Claimed";
-    if (action === "dinner") event.dinnerStatus = "Claimed";
+    if (action === 'entry')  event.entryStatus  = 'Entered';
+    if (action === 'lunch')  event.lunchStatus  = 'Claimed';
+    if (action === 'dinner') event.dinnerStatus = 'Claimed';
 
     await event.save();
 
     res.json({
-      success: true,
+      success:      true,
       action,
-      message: successMessages[action],
+      message:      successMessages[action],
       entryStatus:  event.entryStatus,
       lunchStatus:  event.lunchStatus,
       dinnerStatus: event.dinnerStatus,
     });
   } catch (err) {
-    console.error("selfScan error:", err);
-    res.status(500).json({ success: false, code: "SERVER_ERROR", message: "Server error. Please try again." });
+    console.error('selfScan error:', err);
+    res.status(500).json({ success: false, code: 'SERVER_ERROR', message: 'Server error. Please try again.' });
   }
 };
 
@@ -224,18 +187,12 @@ exports.submitHelpRequest = async (req, res) => {
     const { issueType, message } = req.body;
     if (!issueType) return res.status(400).json({ message: 'issueType is required' });
 
-    // Get student name
-    const user = await User.findById(req.user.id).select('name');
-
-    // Try to get hackathon from live event, fall back to latest hackathon
+    // Determine hackathon
     let hackathonId = null;
-    let workspace   = '';
-    const event = await LiveEvent.findOne({ student: req.user.id });
-    if (event) {
-      hackathonId = event.hackathon;
-      workspace   = event.workspaceLocation || event.workspaceNumber || '';
+    const liveEvent = await LiveEvent.findOne({ student: req.user.id });
+    if (liveEvent) {
+      hackathonId = liveEvent.hackathon;
     } else {
-      // Fallback: use the most recent hackathon in the DB
       const latestHackathon = await Hackathon.findOne().sort({ createdAt: -1 }).select('_id');
       hackathonId = latestHackathon?._id || null;
     }
@@ -244,22 +201,21 @@ exports.submitHelpRequest = async (req, res) => {
       return res.status(400).json({ message: 'No hackathon found to attach this request to.' });
     }
 
-    const sos = await EventSOS.create({
-      studentId:   req.user.id,
-      hackathonId,
-      studentName: user?.name || 'Student',
-      workspace,
+    const request = await HelpRequest.create({
+      student:   req.user.id,
+      hackathon: hackathonId,
       issueType,
-      message: message || '',
+      message:   message || '',
+      status:    'Pending',
     });
 
     return res.status(201).json({
-      id:              sos._id,
-      issue:           sos.issueType,
-      message:         sos.message,
-      cocomResolved:   sos.cocomResolved,
-      studentResolved: sos.studentResolved,
-      time:            sos.createdAt,
+      id:              request._id,
+      issue:           request.issueType,
+      message:         request.message,
+      cocomResolved:   false,
+      studentResolved: false,
+      time:            request.createdAt,
     });
   } catch (err) {
     console.error('submitHelpRequest error:', err);
@@ -269,11 +225,11 @@ exports.submitHelpRequest = async (req, res) => {
 
 /* ───────────────────────────────────────────
    GET /api/live-event/help
-   Student gets their own SOS requests
+   Student gets their own help requests
    ─────────────────────────────────────────── */
 exports.getMyHelpRequests = async (req, res) => {
   try {
-    const requests = await EventSOS.find({ studentId: req.user.id })
+    const requests = await HelpRequest.find({ student: req.user.id })
       .sort({ createdAt: -1 })
       .limit(20);
 
@@ -281,8 +237,8 @@ exports.getMyHelpRequests = async (req, res) => {
       id:              r._id,
       issue:           r.issueType,
       message:         r.message,
-      cocomResolved:   r.cocomResolved,
-      studentResolved: r.studentResolved,
+      cocomResolved:   r.status === 'Resolved',
+      studentResolved: r.status === 'Resolved',
       time:            r.createdAt,
     })));
   } catch (err) {
@@ -293,25 +249,81 @@ exports.getMyHelpRequests = async (req, res) => {
 
 /* ───────────────────────────────────────────
    PUT /api/live-event/help/:id/student-resolve
-   Student confirms resolution → if CoCom also resolved, delete doc
+   Student confirms resolution → mark Resolved
    ─────────────────────────────────────────── */
 exports.studentResolveHelpRequest = async (req, res) => {
   try {
-    const sos = await EventSOS.findOne({ _id: req.params.id, studentId: req.user.id });
-    if (!sos) return res.status(404).json({ message: 'SOS request not found' });
+    const request = await HelpRequest.findOne({ _id: req.params.id, student: req.user.id });
+    if (!request) return res.status(404).json({ message: 'Help request not found' });
 
-    sos.studentResolved = true;
+    request.status = 'Resolved';
+    await request.save();
 
-    if (sos.cocomResolved) {
-      // Both sides confirmed — delete
-      await EventSOS.findByIdAndDelete(sos._id);
-      return res.json({ success: true, deleted: true, message: 'Issue fully resolved and removed.' });
-    }
-
-    await sos.save();
-    return res.json({ success: true, deleted: false, cocomResolved: sos.cocomResolved, studentResolved: true });
+    return res.json({ success: true, deleted: false, cocomResolved: true, studentResolved: true });
   } catch (err) {
     console.error('studentResolveHelpRequest error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ───────────────────────────────────────────
+   POST /api/event/assign-workspace
+   Auto-assign a workspace number to a student.
+
+   Algorithm:
+     Rows A–Z, each row holds SEATS_PER_ROW seats.
+     Find the count of already-assigned workspaces for this hackathon,
+     derive the next seat, form "A-01" style label.
+   Body:   { studentId, hackathonId }
+   Returns { workspaceNumber, workspaceLocation }
+   ─────────────────────────────────────────── */
+const SEATS_PER_ROW = 50;
+
+exports.assignWorkspace = async (req, res) => {
+  try {
+    const { studentId, hackathonId } = req.body;
+
+    if (!studentId || !hackathonId) {
+      return res.status(400).json({ message: 'studentId and hackathonId are required' });
+    }
+
+    // 1. Check if already assigned
+    let event = await LiveEvent.findOne({ student: studentId, hackathon: hackathonId });
+    if (event && event.workspaceNumber) {
+      return res.json({
+        workspaceNumber:   event.workspaceNumber,
+        workspaceLocation: event.workspaceLocation,
+      });
+    }
+
+    // 2. Count total already-assigned participants for this hackathon
+    const assignedCount = await LiveEvent.countDocuments({
+      hackathon:       hackathonId,
+      workspaceNumber: { $exists: true, $ne: null, $ne: '' },
+    });
+
+    // 3. Compute next workspace label
+    const rowIndex  = Math.floor(assignedCount / SEATS_PER_ROW);       // 0 = A, 1 = B, …
+    const seatIndex = (assignedCount % SEATS_PER_ROW) + 1;             // 1-based seat
+    const rowLetter = String.fromCharCode(65 + rowIndex);               // 'A', 'B', …
+    const workspaceNumber   = `${rowLetter}-${String(seatIndex).padStart(2, '0')}`;
+    const workspaceLocation = `Main Hall – Row ${rowLetter}, Seat ${seatIndex}`;
+
+    // 4. Persist — upsert so a record is created if it doesn't exist yet
+    event = await LiveEvent.findOneAndUpdate(
+      { student: studentId, hackathon: hackathonId },
+      { $set: { workspaceNumber, workspaceLocation } },
+      { new: true, upsert: false }   // only update existing records (shortlisted participants)
+    );
+
+    if (!event) {
+      // Student not yet shortlisted — still return the computed number (frontend can display it)
+      return res.json({ workspaceNumber, workspaceLocation });
+    }
+
+    return res.json({ workspaceNumber, workspaceLocation });
+  } catch (err) {
+    console.error('assignWorkspace error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -323,50 +335,47 @@ exports.studentResolveHelpRequest = async (req, res) => {
    ─────────────────────────────────────────── */
 exports.seedDemoEvent = async (req, res) => {
   try {
-    // Find or create demo hackathon
-    let hackathon = await Hackathon.findOne({ title: "AI Innovation Hackathon 2026" });
+    let hackathon = await Hackathon.findOne({ title: 'AI Innovation Hackathon 2026' });
     if (!hackathon) {
       hackathon = await Hackathon.create({
-        title: "AI Innovation Hackathon 2026",
-        organizerName: "IIT Bombay",
-        venue: "Innovation Hall, IIT Bombay",
-        date: "March 15, 2026",
-        time: "9:00 AM – 9:00 PM",
+        title:         'AI Innovation Hackathon 2026',
+        organizerName: 'IIT Bombay',
+        venue:         'Innovation Hall, IIT Bombay',
+        date:          'March 15, 2026',
+        time:          '9:00 AM – 9:00 PM',
       });
     }
 
-    // Find the first student user
-    const student = await User.findOne({ role: "student" });
+    const student = await User.findOne({ role: 'student' });
     if (!student) {
-      return res.status(404).json({ message: "No student user found. Register a student first." });
+      return res.status(404).json({ message: 'No student user found. Register a student first.' });
     }
 
-    // Create or update live event
     let event = await LiveEvent.findOne({ student: student._id, hackathon: hackathon._id });
     if (!event) {
       event = await LiveEvent.create({
-        student: student._id,
-        hackathon: hackathon._id,
-        isShortlisted: true,
-        workspaceNumber: "A-12",
-        workspaceLocation: "Innovation Hall – Row 3, Seat 7",
-        teamName: "Code Crusaders",
-        entryQR: crypto.randomUUID(),
-        mealsQR: crypto.randomUUID(),
+        student:           student._id,
+        hackathon:         hackathon._id,
+        isShortlisted:     true,
+        workspaceNumber:   'A-01',
+        workspaceLocation: 'Innovation Hall – Row A, Seat 1',
+        teamName:          'Code Crusaders',
+        entryQR:           crypto.randomUUID(),
+        mealsQR:           crypto.randomUUID(),
       });
     }
 
     res.status(201).json({
-      message: "Demo data seeded successfully",
-      hackathonId: hackathon._id,
-      studentId: student._id,
+      message:      'Demo data seeded successfully',
+      hackathonId:  hackathon._id,
+      studentId:    student._id,
       studentEmail: student.email,
-      entryQR: event.entryQR,
-      mealsQR: event.mealsQR,
-      liveEventId: event._id,
+      entryQR:      event.entryQR,
+      mealsQR:      event.mealsQR,
+      liveEventId:  event._id,
     });
   } catch (err) {
-    console.error("seedDemoEvent error:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error('seedDemoEvent error:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
