@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Copy, RefreshCw, Users, ClipboardList, PlusCircle, CheckCircle2,
   AlertTriangle, Clock, Zap, X, ChevronDown, ArrowUpRight,
-  MapPin, Flag, Calendar, Trash2,
+  MapPin, Flag, Calendar, Trash2, LogOut,
 } from 'lucide-react';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
 
@@ -167,6 +168,7 @@ function StatCard({ icon: Icon, iconCls, label, value, sub }) {
 
 /* ── Main Dashboard ─────────────────────────────────────── */
 export default function CocomManagementDashboard() {
+  const navigate = useNavigate();
   const [joinCode,    setJoinCode]    = useState('——');
   const [members,    setMembers]    = useState([]);
   const [tasks,      setTasks]      = useState([]);
@@ -303,10 +305,22 @@ export default function CocomManagementDashboard() {
         {/* ── Top Navbar ── */}
         <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-6">
           <span className="font-semibold text-[#0A1628] text-sm">CoCom Dashboard</span>
-          <button onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-royal rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-royal/20 cursor-pointer">
-            <PlusCircle size={12} /> Assign Task
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-royal rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-royal/20 cursor-pointer">
+              <PlusCircle size={12} /> Assign Task
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('hf_token');
+                navigate('/');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <LogOut size={12} /> Sign Out
+            </button>
+          </div>
         </div>
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">

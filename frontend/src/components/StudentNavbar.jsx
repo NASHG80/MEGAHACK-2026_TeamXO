@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, Radio } from 'lucide-react';
+import { Menu, X, User, Radio, LogOut } from 'lucide-react';
 
 const baseLinks = [
   { label: 'Dashboard', to: '/student/dashboard' },
@@ -86,8 +86,8 @@ export default function StudentNavbar({ user = mockUser }) {
             })}
           </div>
 
-          {/* ── Profile Icon ── */}
-          <div className="hidden md:flex items-center">
+          {/* ── Profile Icon + Sign Out ── */}
+          <div className="hidden md:flex items-center gap-2">
             <button
               onClick={() => navigate('/student/profile')}
               className="flex items-center justify-center w-9 h-9 rounded-full bg-royal/10 hover:bg-royal hover:text-white text-royal transition-all duration-200 font-semibold text-sm overflow-hidden cursor-pointer"
@@ -102,6 +102,17 @@ export default function StudentNavbar({ user = mockUser }) {
               ) : (
                 <span>{initials}</span>
               )}
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('hf_token');
+                navigate('/');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+              aria-label="Sign out"
+            >
+              <LogOut size={13} /> Sign Out
             </button>
           </div>
 
@@ -138,7 +149,7 @@ export default function StudentNavbar({ user = mockUser }) {
               {link.label}
             </Link>
           ))}
-          <div className="pt-3 border-t border-gray-100">
+          <div className="pt-3 border-t border-gray-100 space-y-1">
             <Link
               to="/student/profile"
               className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 hover:text-royal hover:bg-royal/5 rounded-lg transition-colors"
@@ -147,6 +158,17 @@ export default function StudentNavbar({ user = mockUser }) {
               <User size={16} />
               {user.name || 'Profile'}
             </Link>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('hf_token');
+                setMobileOpen(false);
+                navigate('/');
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <LogOut size={16} /> Sign Out
+            </button>
           </div>
         </div>
       </div>

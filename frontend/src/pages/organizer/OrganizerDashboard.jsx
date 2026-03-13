@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   PlusCircle, FileText, CalendarCheck, Award,
   Users, Trophy, CheckCircle2, Clock, Bell,
-  TrendingUp, Calendar, ShieldCheck, ArrowUpRight, Zap, BarChart2,
+  TrendingUp, Calendar, ShieldCheck, ArrowUpRight, Zap, BarChart2, LogOut,
 } from 'lucide-react';
 import axios from 'axios';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
@@ -105,6 +105,16 @@ export default function OrganizerDashboard() {
             >
               <PlusCircle size={12} /> Create Hackathon
             </Link>
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('hf_token');
+                navigate('/');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <LogOut size={12} /> Sign Out
+            </button>
           </div>
         </div>
 
