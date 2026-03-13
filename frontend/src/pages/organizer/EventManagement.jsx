@@ -6,7 +6,7 @@ import OrganizerSidebar from '../../components/OrganizerSidebar';
 /* ═══════════════════════ TIMELINE & PHASES ═══════════════════════ */
 const PHASES = ['Check-In', 'Hacking', 'Lunch', 'Judging', 'Dinner', 'Results'];
 
-// Timeline with 24h minutes for auto-advance
+// Fallback hardcoded timeline (used when no custom timeline is set)
 const TIMELINE_DEF = [
   { id: 1, startMin: 9*60,    time: '09:00 AM', label: 'Registration & Check-In Opens' },
   { id: 2, startMin: 10*60,   time: '10:00 AM', label: 'Hacking Begins' },
@@ -17,7 +17,7 @@ const TIMELINE_DEF = [
   { id: 7, startMin: 20*60,   time: '08:00 PM', label: 'Results & Prize Distribution' },
 ];
 
-/* ── Derive timeline statuses from current time ── */
+/* ── Derive timeline statuses from current time (for fallback TIMELINE_DEF) ── */
 function computeTimeline(nowMin) {
   return TIMELINE_DEF.map((t, i) => {
     const nextStart = TIMELINE_DEF[i + 1]?.startMin ?? Infinity;
@@ -28,10 +28,70 @@ function computeTimeline(nowMin) {
   });
 }
 
+/**
+ * Convert DB timeline items (from hackathon.timeline in ManageHackathon)
+ * into the format EventHeader expects: { id, time (display), label, status }
+ * DB item shape: { _id, title, description, date (YYYY-MM-DD), time (HH:MM) }
+ */
+function convertDbTimeline(dbItems) {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const nowMs = now.getTime();
+
+  return dbItems.map((item, i) => {
+    // Parse datetime to ms
+    let startMs = null;
+    if (item.date && item.time) {
+      const dt = new Date(`${item.date}T${item.time}`);
+      if (!isNaN(dt.getTime())) startMs = dt.getTime();
+    } else if (item.time) {
+      const dt = new Date(`${todayStr}T${item.time}`);
+      if (!isNaN(dt.getTime())) startMs = dt.getTime();
+    }
+
+    // Compute status vs current time
+    let status = 'upcoming';
+    if (startMs !== null) {
+      const next = dbItems[i + 1];
+      let nextMs = null;
+      if (next?.date && next?.time) {
+        const nd = new Date(`${next.date}T${next.time}`);
+        if (!isNaN(nd.getTime())) nextMs = nd.getTime();
+      } else if (next?.time) {
+        const nd = new Date(`${todayStr}T${next.time}`);
+        if (!isNaN(nd.getTime())) nextMs = nd.getTime();
+      }
+      if (nextMs !== null && nowMs >= nextMs) status = 'done';
+      else if (nowMs >= startMs) status = 'active';
+      else if (startMs <= nowMs) status = 'active';
+    }
+
+    // Format time: "HH:MM" → "10:00 AM"
+    let displayTime = item.time || '';
+    if (item.time && item.time.includes(':')) {
+      const [hStr, mStr] = item.time.split(':');
+      const h = parseInt(hStr, 10);
+      const m = mStr.padStart(2, '0');
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      displayTime = `${String(h12).padStart(2, '0')}:${m} ${suffix}`;
+    }
+    if (item.date) {
+      const d = new Date(item.date + 'T00:00:00');
+      const dateLabel = isNaN(d.getTime()) ? item.date
+        : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      displayTime = `${dateLabel} · ${displayTime}`;
+    }
+
+    return { id: item._id || i, time: displayTime || 'TBD', label: item.title, status };
+  });
+}
+
 function nowMinutes() {
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
 }
+
 
 /* ═══════════════════════ ATOMS ═══════════════════════ */
 function Toast({ t }) {
@@ -43,82 +103,164 @@ function Toast({ t }) {
   );
 }
 
+/* ═══════════════════════ LIVE CLOCK ═══════════════════════ */
+function LiveClock() {
+  const [time, setTime] = useState(() => new Date());
+  useEffect(() => {
+    const iv = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+  return (
+    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: '13px', fontWeight: 700, color: '#1E64FF', background: 'rgba(30,100,255,0.07)', padding: '3px 10px', borderRadius: '8px', letterSpacing: '0.5px' }}>
+      {time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+    </span>
+  );
+}
+
 /* ═══════════════════════ EVENT HEADER  ═══════════════════════ */
 function EventHeader({ hackId, hackathon, timeline }) {
-  const activePhase = 1; // for phase stepper (static)
+  const timelineRef = useRef(null);
+
+  // Auto-scroll active item into view
+  useEffect(() => {
+    const el = timelineRef.current?.querySelector('[data-active="true"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [timeline]);
+
+  const activeIdx = timeline.findIndex(t => t.status === 'active');
+  const doneCount = timeline.filter(t => t.status === 'done').length;
+  const totalCount = timeline.length;
+  // Fill% up to end of active (or all done)
+  const fillPct = totalCount > 1
+    ? Math.min(100, ((activeIdx >= 0 ? activeIdx + 0.5 : doneCount) / (totalCount - 1)) * 100)
+    : (doneCount > 0 ? 100 : 0);
 
   return (
-    <div style={{ background: 'linear-gradient(160deg,#f8fafc 0%,#ffffff 100%)', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.06)', padding: '28px 32px', marginBottom: '24px' }}>
+    <div style={{ background: '#ffffff', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,0.06)', padding: '28px 32px 24px', marginBottom: '24px', position: 'relative', overflow: 'hidden' }}>
+      {/* Subtle top-right accent */}
+      <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(30,100,255,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-      {/* ── Row 1: Title + meta ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
+      {/* ── Row 1: Title + clock ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '20px', padding: '3px 12px', fontSize: '12px', fontWeight: 700, color: '#16a34a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '20px', padding: '3px 12px', fontSize: '11px', fontWeight: 800, color: '#16a34a', letterSpacing: '0.6px' }}>
               <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
-              LIVE
+              LIVE EVENT
             </span>
-            <span style={{ fontSize: '13px', color: '#94a3b8' }}>ID: {hackId}</span>
+            <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>#{hackId}</span>
           </div>
-          <h1 style={{ fontSize: 'clamp(20px,3vw,28px)', fontWeight: 800, color: '#0A1628', margin: '0 0 10px 0', letterSpacing: '-0.3px' }}>{hackathon ? hackathon.title : 'No Active Event'}</h1>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0', alignItems: 'center' }}>
-            {[hackathon?.deadline || 'TBD', hackathon ? 'Event Ongoing' : 'No details'].map((v, i, arr) => (
-              <span key={v} style={{ fontSize: '13px', color: '#64748b' }}>
-                {v}{i < arr.length - 1 && <span style={{ margin: '0 10px', color: '#cbd5e1' }}>|</span>}
-              </span>
-            ))}
+          <h1 style={{ fontSize: 'clamp(18px,2.5vw,26px)', fontWeight: 800, color: '#0A1628', margin: '0 0 6px 0', letterSpacing: '-0.3px' }}>
+            {hackathon ? hackathon.title : 'No Active Event'}
+          </h1>
+          <div style={{ fontSize: '13px', color: '#64748b' }}>
+            {hackathon?.deadline ? `Deadline: ${hackathon.deadline}` : hackathon ? 'Event Ongoing' : 'No event data'}
           </div>
         </div>
-        {/* Phase stepper */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0', overflowX: 'auto', maxWidth: '520px' }}>
-          {PHASES.map((p, i) => {
-            const done = i < activePhase, act = i === activePhase;
-            return (
-              <div key={p} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <div style={{ padding: '0 10px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: act ? 700 : done ? 600 : 400, color: act ? '#1E64FF' : done ? '#94a3b8' : '#94a3b8', textDecoration: done ? 'line-through' : 'none', paddingBottom: '4px', borderBottom: act ? '2px solid #1E64FF' : '2px solid transparent', whiteSpace: 'nowrap', display: 'block', transition: 'all .2s' }}>
-                    {done ? `✓ ${p}` : p}
-                  </span>
-                </div>
-                {i < PHASES.length - 1 && <span style={{ color: '#e2e8f0', fontSize: '13px' }}>›</span>}
-              </div>
-            );
-          })}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+          <LiveClock />
+          <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'right' }}>
+            {doneCount}/{totalCount} phases completed
+          </div>
         </div>
       </div>
 
-      {/* ── Row 2: Timeline strip (horizontal, real-time) ── */}
-      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '18px', marginBottom: '18px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '14px' }}>Event Timeline</div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0', overflowX: 'auto', paddingBottom: '4px' }}>
-          {timeline.map((t, i) => {
-            const done = t.status === 'done', act = t.status === 'active';
-            const dotColor = done ? '#22c55e' : act ? '#1E64FF' : '#cbd5e1';
-            const labelColor = done ? '#22c55e' : act ? '#1E64FF' : '#94a3b8';
-            return (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', flexShrink: 0 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '100px', maxWidth: '130px', padding: '0 6px' }}>
-                  {/* Dot + connector */}
-                  <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '8px' }}>
-                    {i > 0 && <div style={{ flex: 1, height: '2px', background: done ? '#22c55e' : '#e2e8f0', transition: 'background .5s' }} />}
-                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: dotColor, flexShrink: 0, boxShadow: act ? '0 0 0 4px rgba(30,100,255,0.15)' : undefined, animation: act ? 'pulse 2s infinite' : undefined, transition: 'background .5s' }} />
-                    {i < timeline.length - 1 && <div style={{ flex: 1, height: '2px', background: act || done ? (done ? '#22c55e' : '#e2e8f0') : '#e2e8f0', transition: 'background .5s' }} />}
-                  </div>
-                  {/* Label + time */}
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '11px', fontWeight: act || done ? 700 : 500, color: labelColor, lineHeight: 1.3, marginBottom: '3px', whiteSpace: 'nowrap' }}>{t.label}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{t.time}</div>
-                    {act && <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '10px', fontWeight: 700, color: '#1E64FF', background: 'rgba(30,100,255,0.08)', padding: '2px 8px', borderRadius: '20px' }}>Now</span>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {/* ── Timeline Label + Progress ── */}
+      <div style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            Event Timeline
+          </span>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+            {activeIdx >= 0 ? `Phase ${activeIdx + 1} of ${totalCount} active` : doneCount === totalCount && totalCount > 0 ? 'All phases complete' : 'Event not started'}
+          </span>
         </div>
+        {/* Progress bar */}
+        <div style={{ height: '4px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${fillPct}%`, background: 'linear-gradient(90deg,#22c55e,#1E64FF)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
+        </div>
+      </div>
+
+      {/* ── Horizontal scrollable timeline ── */}
+      <div ref={timelineRef} style={{ display: 'flex', gap: '0', overflowX: 'auto', paddingBottom: '4px' }}
+           className="hide-scroll">
+        {timeline.map((t, i) => {
+          const done = t.status === 'done';
+          const act  = t.status === 'active';
+          const isLast = i === timeline.length - 1;
+
+          return (
+            <div key={t.id} data-active={act ? 'true' : 'false'}
+              style={{ display: 'flex', alignItems: 'center', flexShrink: 0, minWidth: 0 }}>
+
+              {/* ── Node card ── */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                padding: '12px 16px',
+                borderRadius: '14px',
+                background: act
+                  ? 'linear-gradient(135deg,rgba(30,100,255,0.08),rgba(30,100,255,0.04))'
+                  : done ? 'rgba(34,197,94,0.06)' : '#f8fafc',
+                border: act ? '1.5px solid rgba(30,100,255,0.25)' : done ? '1px solid rgba(34,197,94,0.2)' : '1px solid #e2e8f0',
+                boxShadow: act ? '0 2px 12px rgba(30,100,255,0.1)' : 'none',
+                transition: 'all 0.4s ease',
+                minWidth: '130px', maxWidth: '160px',
+                cursor: 'default',
+              }}>
+                {/* Dot */}
+                <div style={{
+                  width: act ? '14px' : '10px',
+                  height: act ? '14px' : '10px',
+                  borderRadius: '50%',
+                  background: done ? '#22c55e' : act ? '#1E64FF' : '#e2e8f0',
+                  boxShadow: act ? '0 0 0 4px rgba(30,100,255,0.15)' : done ? '0 0 0 3px rgba(34,197,94,0.15)' : 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.4s',
+                  animation: act ? 'dotPulse 1.8s ease-in-out infinite' : 'none',
+                }}>
+                  {done && (
+                    <svg width="6" height="6" viewBox="0 0 9 9" fill="none">
+                      <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+
+                {/* Time */}
+                <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.4px', color: done ? '#16a34a' : act ? '#1E64FF' : '#94a3b8', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                  {t.time}
+                </div>
+
+                {/* Label */}
+                <div style={{ fontSize: '11px', fontWeight: act ? 700 : done ? 600 : 400, color: done ? '#374151' : act ? '#0A1628' : '#94a3b8', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word' }}>
+                  {t.label}
+                </div>
+
+                {/* NOW badge on active */}
+                {act && (
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#1E64FF', background: 'rgba(30,100,255,0.1)', padding: '2px 7px', borderRadius: '10px', letterSpacing: '0.8px', animation: 'pulse 1.5s infinite' }}>
+                    NOW
+                  </span>
+                )}
+              </div>
+
+              {/* ── Connector line ── */}
+              {!isLast && (
+                <div style={{ width: '28px', height: '2px', flexShrink: 0, background: done ? 'linear-gradient(90deg,#22c55e,#93c5fd)' : '#e2e8f0', borderRadius: '2px', transition: 'background 0.4s' }} />
+              )}
+            </div>
+          );
+        })}
+
+        {timeline.length === 0 && (
+          <div style={{ padding: '18px 24px', color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
+            No timeline events set — add them in Manage Hackathon
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 
 /* ═══════════════════════ SECTION 1 — WORKSPACE ASSIGNMENT ═══════════════════════ */
 function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId }) {
@@ -798,7 +940,7 @@ function SOSPanel({ sosRequests, setSosRequests, showToast, hackId }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {sosRequests.map(r => (
-              <div key={r.sosId} style={{ borderLeft: '4px solid #ef4444', background: 'rgba(239,68,68,0.04)', borderRadius: '0 14px 14px 0', padding: '14px 16px', border: '1px solid rgba(239,68,68,0.1)', borderLeft: '4px solid #ef4444' }}>
+              <div key={r.sosId} style={{ background: 'rgba(239,68,68,0.04)', borderRadius: '0 14px 14px 0', padding: '14px 16px', border: '1px solid rgba(239,68,68,0.1)', borderLeft: '4px solid #ef4444' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: 700, color: '#0A1628', marginBottom: '3px' }}>
@@ -824,16 +966,17 @@ function SOSPanel({ sosRequests, setSosRequests, showToast, hackId }) {
 /* ═══════════════════════ MAIN ═══════════════════════ */
 export default function EventManagement() {
   const { id: hackathonIdParam } = useParams();
-  const hackathonId = hackathonIdParam || 'HF-001';
+  const hackathonSlug = hackathonIdParam || null;
   
-  const [sbOpen, setSbOpen]             = useState(true);
-  const [workspaces, setWorkspaces]     = useState([]);
-  const [teams, setTeams]               = useState([]);
-  const [sosRequests, setSosRequests]   = useState([]);
-  const [hackathon, setHackathon]       = useState(null);
-  const [toast, setToast]               = useState(null);
-  // Real-time timeline — recompute every 30 seconds
-  const [timeline, setTimeline]         = useState(() => computeTimeline(nowMinutes()));
+  const [sbOpen, setSbOpen]           = useState(true);
+  const [workspaces, setWorkspaces]   = useState([]);
+  const [teams, setTeams]             = useState([]);
+  const [sosRequests, setSosRequests] = useState([]);
+  const [hackathon, setHackathon]     = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [resolvedSlug, setResolvedSlug] = useState(null); // actual slug used for event API
+  const [toast, setToast]             = useState(null);
+  const [timeline, setTimeline]       = useState(() => computeTimeline(nowMinutes()));
 
   useEffect(() => {
     setTimeline(computeTimeline(nowMinutes()));
@@ -841,10 +984,22 @@ export default function EventManagement() {
     return () => clearInterval(iv);
   }, []);
 
-  const fetchData = async () => {
+  async function loadHackathon(slug) {
+    const token = localStorage.getItem('hf_token');
+    // Load hackathon detail from organizer route
+    const hackRes = await fetch(`http://localhost:5000/api/organizer/hackathons/${slug}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (hackRes.ok) {
+      const hData = await hackRes.json();
+      setHackathon(hData.hackathon || null);
+    }
+  }
+
+  async function loadEventData(slug) {
     const token = localStorage.getItem('hf_token');
     try {
-      const res = await fetch(`http://localhost:5000/api/organizer/events/${hackathonId}`, {
+      const res = await fetch(`http://localhost:5000/api/organizer/events/${slug}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -853,35 +1008,58 @@ export default function EventManagement() {
         setTeams(data.teams || []);
         setSosRequests(data.sosRequests || []);
       }
-      
-      const hackRes = await fetch(`http://localhost:5000/api/hackathons/${hackathonId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (hackRes.ok) {
-        const hData = await hackRes.json();
-        setHackathon(hData.hackathon || null);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  const fetchData = async () => {
+    const token = localStorage.getItem('hf_token');
+    setLoading(true);
+    try {
+      if (hackathonSlug) {
+        await Promise.all([loadHackathon(hackathonSlug), loadEventData(hackathonSlug)]);
+        setResolvedSlug(hackathonSlug);
+      } else {
+        // No slug in URL — auto-load organizer's first hackathon
+        const listRes = await fetch('http://localhost:5000/api/organizer/hackathons', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const first = (listData.data || [])[0];
+          if (first?.slug) {
+            await Promise.all([loadHackathon(first.slug), loadEventData(first.slug)]);
+            setResolvedSlug(first.slug);
+          }
+        }
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
-    // Poll every 15s for live updates
-    const iv = setInterval(fetchData, 15_000);
+    const iv = setInterval(() => {
+      // Only refresh event data (workspaces/teams/SOS) — not the heavy hackathon detail
+      if (resolvedSlug) loadEventData(resolvedSlug);
+    }, 15_000);
     return () => clearInterval(iv);
-  }, [hackathonId]);
+  }, [hackathonSlug]);
 
   const handleSeed = async () => {
     const token = localStorage.getItem('hf_token');
+    const slug = resolvedSlug || hackathonSlug;
     try {
-      const res = await fetch(`http://localhost:5000/api/organizer/events/${hackathonId}/seed`, {
+      const res = await fetch(`http://localhost:5000/api/organizer/events/${slug}/seed`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        fetchData();
+        loadEventData(slug);
         showToast('Database seeded successfully!');
       }
     } catch (err) {
@@ -892,6 +1070,13 @@ export default function EventManagement() {
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
+  const effectiveId = resolvedSlug || hackathonSlug || 'N/A';
+
+  // Use custom DB timeline if the organizer has set one, otherwise fall back to hardcoded
+  const displayTimeline = (hackathon?.timeline?.length > 0)
+    ? convertDbTimeline(hackathon.timeline)
+    : timeline; // fallback: auto-computed from TIMELINE_DEF
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
       <style>{`
@@ -900,11 +1085,16 @@ export default function EventManagement() {
         @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.2)}}
         @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
         @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
         .btn-hover:hover{opacity:0.88;transform:translateY(-1px);}
         .ws-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(30,100,255,0.1)!important;}
         .team-card:hover{transform:translateX(3px);}
         ::-webkit-scrollbar{width:5px;height:5px;}
         ::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:4px;}
+        .skel{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px;}
+        @keyframes dotPulse{0%,100%{box-shadow:0 0 0 3px rgba(30,100,255,0.2),0 0 8px rgba(30,100,255,0.4)}50%{box-shadow:0 0 0 6px rgba(30,100,255,0.1),0 0 16px rgba(30,100,255,0.6)}}
+        .hide-scroll::-webkit-scrollbar{display:none;}
+        .hide-scroll{-ms-overflow-style:none;scrollbar-width:none;}
       `}</style>
 
       <OrganizerSidebar open={sbOpen} onToggle={() => setSbOpen(o => !o)} />
@@ -912,14 +1102,43 @@ export default function EventManagement() {
 
       <div style={{ transition: 'padding-left .3s', paddingLeft: sbOpen ? '240px' : '64px' }}>
         <div style={{ maxWidth: '1320px', margin: '0 auto', padding: '24px 22px 100px' }}>
-          
-          <EventHeader hackId={hackathonId || 'HF-001'} hackathon={hackathon} timeline={timeline} />
-          <WorkspaceSection workspaces={workspaces} setWorkspaces={setWorkspaces} teams={teams} showToast={showToast} hackId={hackathonId} />
-          {/* Team Entry + SOS side by side */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
-            <TeamEntryPanel teams={teams} setTeams={setTeams} showToast={showToast} hackId={hackathonId} />
-            <SOSPanel sosRequests={sosRequests} setSosRequests={setSosRequests} showToast={showToast} hackId={hackathonId} />
-          </div>
+
+          {loading ? (
+            /* ── Skeleton screen ── */
+            <div>
+              {/* Header skeleton */}
+              <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', padding: '28px 32px', marginBottom: '24px' }}>
+                <div className="skel" style={{ height: '20px', width: '120px', marginBottom: '14px' }} />
+                <div className="skel" style={{ height: '30px', width: '300px', marginBottom: '12px' }} />
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div className="skel" style={{ height: '14px', width: '140px' }} />
+                  <div className="skel" style={{ height: '14px', width: '100px' }} />
+                </div>
+                <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '20px', paddingTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+                  {[1,2,3,4].map(i => <div key={i} className="skel" style={{ height: '48px' }} />)}
+                </div>
+              </div>
+              {/* Workspace skeleton */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                {[1,2,3].map(i => (
+                  <div key={i} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px' }}>
+                    <div className="skel" style={{ height: '16px', width: '80px', marginBottom: '12px' }} />
+                    <div className="skel" style={{ height: '12px', width: '120px', marginBottom: '8px' }} />
+                    <div className="skel" style={{ height: '12px', width: '90px' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <EventHeader hackId={effectiveId} hackathon={hackathon} timeline={displayTimeline} />
+              <WorkspaceSection workspaces={workspaces} setWorkspaces={setWorkspaces} teams={teams} showToast={showToast} hackId={effectiveId} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
+                <TeamEntryPanel teams={teams} setTeams={setTeams} showToast={showToast} hackId={effectiveId} />
+                <SOSPanel sosRequests={sosRequests} setSosRequests={setSosRequests} showToast={showToast} hackId={effectiveId} />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

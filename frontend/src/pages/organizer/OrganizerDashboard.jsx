@@ -48,20 +48,36 @@ function StatusBadge({ status }) {
 export default function OrganizerDashboard() {
   const navigate = useNavigate();
 
-  const [hackathons,  setHackathons]  = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [activities,  setActivities]  = useState([]);
-  const [user,        setUser]        = useState(null);
-  const [stats,       setStats]       = useState({
+  const [hackathons,        setHackathons]        = useState([]);
+  const [loading,           setLoading]           = useState(true);
+  const [activities,        setActivities]        = useState([]);
+  const [user,              setUser]              = useState(null);
+  const [activeHackathonId, setActiveHackathonId] = useState(
+    () => localStorage.getItem('hf_active_hackathon') || ''
+  );
+  const [stats, setStats] = useState({
     totalHackathons: 0, totalParticipants: 0, totalSubmissions: 0, totalPending: 0,
   });
+
+  // Activate a hackathon for the certificate module
+  const activateHackathon = (id, e) => {
+    e.stopPropagation();
+    localStorage.setItem('hf_active_hackathon', id);
+    setActiveHackathonId(id);
+  };
 
   useEffect(() => {
     // Fetch all hackathons from the standard public endpoint
     axios.get('http://localhost:5000/api/hackathons')
       .then(res => {
-        setHackathons(res.data.data || []);
-        setStats(s => ({ ...s, totalHackathons: (res.data.data || []).length }));
+        const list = res.data.data || [];
+        setHackathons(list);
+        setStats(s => ({ ...s, totalHackathons: list.length }));
+        // Auto-activate the first hackathon if none is saved yet
+        if (list.length > 0 && !localStorage.getItem('hf_active_hackathon')) {
+          localStorage.setItem('hf_active_hackathon', list[0]._id);
+          setActiveHackathonId(list[0]._id);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -192,40 +208,61 @@ export default function OrganizerDashboard() {
                     </Link>
                   </div>
                 ) : (
-                  hackathons.map((hack) => (
-                    <div
-                      key={hack.slug}
-                      onClick={() => navigate(`/organizer/hackathon/${hack.slug}/preview`)}
-                      className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:border-royal/30 hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row gap-4 sm:items-center"
-                    >
-                      <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center border border-gray-200">
-                        {hack.logoImage
-                          ? <img src={`http://localhost:5000/${hack.logoImage}`} alt="logo" className="w-full h-full object-cover" />
-                          : <span className="text-gray-400 font-black text-2xl">{hack.title?.[0]}</span>
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-base font-bold text-dark truncate">{hack.title}</h3>
-                          <StatusBadge status="Live" />
+                  hackathons.map((hack) => {
+                    const isActive = hack._id === activeHackathonId;
+                    return (
+                      <div
+                        key={hack.slug}
+                        onClick={() => navigate(`/organizer/hackathon/${hack.slug}/preview`)}
+                        className={`bg-white rounded-2xl p-5 border shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row gap-4 sm:items-center
+                          ${isActive ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-gray-100 hover:border-royal/30'}`}
+                      >
+                        <div className={`w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center border
+                          ${isActive ? 'border-emerald-300' : 'border-gray-200'}`}>
+                          {hack.logoImage
+                            ? <img src={hack.logoImage} alt="logo" className="w-full h-full object-cover" />
+                            : <span className="text-gray-400 font-black text-2xl">{hack.title?.[0]}</span>
+                          }
                         </div>
-                        <p className="text-xs text-gray-500 font-semibold mb-2">
-                          <Calendar size={12} className="inline mr-1" />
-                          Deadline: {hack.registrationDeadline
-                            ? new Date(hack.registrationDeadline).toLocaleDateString()
-                            : 'TBA'}
-                        </p>
-                        <div className="flex flex-wrap gap-4 text-xs font-semibold text-gray-400">
-                          <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
-                            <Users size={12} /> {hack.teamSizeMin || 2}–{hack.teamSizeMax || 4} Members
-                          </span>
-                          <span className="flex items-center gap-1.5 text-royal bg-royal/5 px-2 py-0.5 rounded-lg border border-royal/10">
-                            <Trophy size={12} /> {hack.prizePool || '—'}
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h3 className="text-base font-bold text-dark truncate">{hack.title}</h3>
+                            <StatusBadge status="Live" />
+                            {isActive && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Certificate Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 font-semibold mb-2">
+                            <Calendar size={12} className="inline mr-1" />
+                            Deadline: {hack.registrationDeadline
+                              ? new Date(hack.registrationDeadline).toLocaleDateString()
+                              : 'TBA'}
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-semibold text-gray-400">
+                            <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                              <Users size={12} /> {hack.teamSizeMin || 2}–{hack.teamSizeMax || 4} Members
+                            </span>
+                            <span className="flex items-center gap-1.5 text-royal bg-royal/5 px-2 py-0.5 rounded-lg border border-royal/10">
+                              <Trophy size={12} /> {hack.prizePool || '—'}
+                            </span>
+                            {/* Activate for certificates button */}
+                            {!isActive && (
+                              <button
+                                onClick={(e) => activateHackathon(hack._id, e)}
+                                className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-lg
+                                           text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                              >
+                                <Award size={10} /> Activate for Certificates
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

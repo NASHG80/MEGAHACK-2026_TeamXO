@@ -177,14 +177,17 @@ export default function CocomManagementDashboard() {
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
+  const [hackathonId, setHackathonId] = useState(null);
+
   /* ── Fetch initial data ── */
   useEffect(() => {
     const load = async () => {
       try {
-        const [codeRes, membersRes, tasksRes] = await Promise.all([
+        const [codeRes, membersRes, tasksRes, hackRes] = await Promise.all([
           fetch(`${API}/latest-code`),
           fetch(`${API}/members`),
           fetch(`${API}/tasks`),
+          fetch('http://localhost:5000/api/hackathons/latest'),
         ]);
         const codeData    = await codeRes.json();
         const membersData = await membersRes.json();
@@ -192,6 +195,13 @@ export default function CocomManagementDashboard() {
         if (codeData.join_code)  setJoinCode(codeData.join_code);
         if (membersData.members) setMembers(membersData.members);
         if (tasksData.tasks)     setTasks(tasksData.tasks);
+
+        // Try to get hackathon id (may 404 if route not available)
+        if (hackRes.ok) {
+          const hackData = await hackRes.json();
+          const id = hackData._id || hackData.hackathon?._id || hackData.hackathons?.[0]?._id;
+          if (id) setHackathonId(id);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -205,7 +215,11 @@ export default function CocomManagementDashboard() {
   const generateCode = async () => {
     setGenerating(true);
     try {
-      const res  = await fetch(`${API}/generate-code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const res  = await fetch(`${API}/generate-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(hackathonId ? { hackathon_id: hackathonId } : {}),
+      });
       const data = await res.json();
       if (data.join_code) { setJoinCode(data.join_code); showToast('New join code generated!'); }
     } catch (err) {

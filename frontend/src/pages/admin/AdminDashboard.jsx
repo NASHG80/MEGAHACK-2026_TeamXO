@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Users, Building2, Trophy, Zap, Bell, FileText,
   CheckCircle, XCircle, Clock, Shield, RotateCcw,
@@ -202,6 +202,7 @@ function DetailsModal({ req, onClose, onApprove, onReject }) {
 
 /* ─── MAIN ─── */
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [verifications, setVerifications] = useState([]);
   const [students, setStudents]           = useState([]);
   const [organizers, setOrganizers]       = useState([]);
@@ -329,7 +330,7 @@ export default function AdminDashboard() {
               <p className="text-sm font-semibold text-dark leading-tight">Admin</p>
               <p className="text-[11px] text-gray-400">Super Admin</p>
             </div>
-            <button onClick={() => { clearAdminToken(); setIsLoggedIn(false); }}
+            <button onClick={() => { localStorage.removeItem('hf_token'); navigate('/login'); }}
               className="ml-2 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer">
               Sign Out
             </button>

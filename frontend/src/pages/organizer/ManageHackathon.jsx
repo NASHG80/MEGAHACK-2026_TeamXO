@@ -5,8 +5,10 @@ import {
   Search, Download, Copy, Mail, Trash2, Eye, BarChart2, ClipboardList,
   ToggleLeft, ToggleRight, AlertTriangle, CheckCircle2, ExternalLink,
   CalendarDays, Trophy, Zap, Grid3X3, List, TrendingUp, Clock, ArrowUpRight,
+  Plus, Pencil, MapPin, X,
 } from 'lucide-react';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
+import GenerateQRCodeSection from '../../components/GenerateQRCodeSection';
 
 import { useParams } from 'react-router-dom';
 
@@ -174,81 +176,176 @@ function StatsRow({ hack, teams, setTab }) {
 }
 
 /* ─── OVERVIEW TAB ─── */
-function OverviewTab({ hack, activity, showToast }) {
-  const activityDot = { join: '#3b82f6', submit: '#22c55e', verify: '#8b5cf6', reg: '#f59e0b', update: '#64748b' };
-  const phasesData = hack.phases?.length ? hack.phases : DEFAULT_PHASES;
+function OverviewTab({ hack, activity, showToast, hackathonId }) {
+  // ── Timeline state ──
+  const [timelineItems, setTimelineItems] = useState(hack.timeline || []);
+  const [showForm, setShowForm]           = useState(false);
+  const [editIdx, setEditIdx]             = useState(null); // null = new, number = editing
+  const [saving, setSaving]               = useState(false);
+  const BLANK = { title: '', description: '', date: '', time: '' };
+  const [form, setForm] = useState(BLANK);
+
+  // Keep in sync if hack prop updates
+  useEffect(() => { setTimelineItems(hack.timeline || []); }, [hack]);
+
+  const openAdd  = () => { setForm(BLANK); setEditIdx(null); setShowForm(true); };
+  const openEdit = (i) => { setForm({ ...timelineItems[i] }); setEditIdx(i); setShowForm(true); };
+  const cancel   = () => { setShowForm(false); setEditIdx(null); };
+
+  const saveTimeline = async (newList) => {
+    setSaving(true);
+    const token = localStorage.getItem('hf_token');
+    const slug  = hack.slug || hack.hackathonId;
+    try {
+      const res = await fetch(`http://localhost:5000/api/hackathons/${slug}/timeline`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ timeline: newList }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Timeline save failed:', err.message || res.status);
+      }
+    } catch (e) {
+      console.error('Timeline save error:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { showToast('Event title is required'); return; }
+    let newList;
+    if (editIdx !== null) {
+      newList = timelineItems.map((it, i) => i === editIdx ? { ...form } : it);
+    } else {
+      newList = [...timelineItems, { ...form }];
+    }
+    // Sort chronologically by date+time
+    newList.sort((a, b) => {
+      const da = new Date(`${a.date} ${a.time}`);
+      const db = new Date(`${b.date} ${b.time}`);
+      return da - db;
+    });
+    setTimelineItems(newList);
+    setShowForm(false);
+    setEditIdx(null);
+    await saveTimeline(newList);
+    showToast(editIdx !== null ? 'Timeline event updated' : 'Timeline event added');
+  };
+
+  const handleDelete = async (i) => {
+    const newList = timelineItems.filter((_, idx) => idx !== i);
+    setTimelineItems(newList);
+    await saveTimeline(newList);
+    showToast('Timeline event removed');
+  };
+
   return (
     <div className="space-y-5">
       <div className="grid lg:grid-cols-3 gap-5">
 
-        {/* Phases timeline */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-          <h3 className="text-sm font-bold text-dark mb-4 flex items-center gap-2">
-            <Clock size={14} className="text-royal" /> Hackathon Phases
-          </h3>
-          {phasesData.map((p, i) => (
-            <div key={p.label} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${p.status === 'done' ? 'bg-emerald-500' : p.status === 'active' ? 'bg-royal ring-4 ring-royal/20' : 'bg-gray-200'}`}>
-                  {p.status === 'done'
-                    ? <CheckCircle2 size={11} className="text-white" />
-                    : p.status === 'active'
-                    ? <span className="w-2 h-2 rounded-full bg-white" />
-                    : <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />}
+        {/* ── Hackathon Timeline (Create Timeline) ── */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)] flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-dark flex items-center gap-2">
+              <Clock size={14} className="text-royal" /> Hackathon Timeline
+            </h3>
+            <button onClick={openAdd}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-royal text-white hover:bg-blue-700 transition-all cursor-pointer shadow-sm">
+              <Plus size={12} /> Add Event
+            </button>
+          </div>
+
+          {/* Inline form */}
+          {showForm && (
+            <div className="mb-4 bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3 animate-in">
+              <p className="text-xs font-bold text-royal mb-1">{editIdx !== null ? 'Edit Event' : 'New Timeline Event'}</p>
+              {[['Event Title *', 'title', 'text', 'e.g. Submission Deadline'],
+                ['Description',   'description', 'text', 'Short description...'],
+                ['Date',          'date', 'date', ''],
+                ['Time',          'time', 'time', ''],
+              ].map(([label, key, type, ph]) => (
+                <div key={key}>
+                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wide block mb-1">{label}</label>
+                  <input type={type} placeholder={ph} value={form[key]}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-blue-200 rounded-lg outline-none focus:border-royal focus:ring-2 focus:ring-royal/10 bg-white" />
                 </div>
-                {i < phasesData.length - 1 && <div className={`w-px mt-1 mb-1 ${p.status === 'done' ? 'bg-emerald-300' : 'bg-gray-100'}`} style={{ minHeight: '20px' }} />}
-              </div>
-              <div className="pb-4">
-                <p className={`text-sm font-semibold ${p.status === 'active' ? 'text-royal' : p.status === 'done' ? 'text-emerald-600' : 'text-gray-400'}`}>{p.label}</p>
-                <p className="text-xs text-gray-400">{p.date}</p>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleSave} disabled={saving}
+                  className="flex-1 py-2 text-xs font-bold rounded-lg bg-royal text-white hover:bg-blue-700 transition-all cursor-pointer disabled:opacity-60">
+                  {saving ? 'Saving…' : editIdx !== null ? 'Update Event' : 'Add Event'}
+                </button>
+                <button onClick={cancel}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer">
+                  Cancel
+                </button>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Timeline display */}
+          {timelineItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center flex-1 min-h-[120px] text-center">
+              <MapPin size={24} className="text-gray-200 mb-2" />
+              <p className="text-xs font-semibold text-gray-400">No timeline events yet</p>
+              <p className="text-[10px] text-gray-300 mt-0.5">Click "Add Event" to create your first milestone</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-0">
+              {timelineItems.map((item, i) => (
+                <div key={i} className="flex gap-3">
+                  {/* Dot + line */}
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className="w-4 h-4 rounded-full bg-royal ring-2 ring-royal/20 flex items-center justify-center mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                    </div>
+                    {i < timelineItems.length - 1 && <div className="w-px flex-1 bg-gray-100 mt-1 mb-1" style={{ minHeight: '20px' }} />}
+                  </div>
+
+                  {/* Content */}
+                  <div className="pb-4 flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-dark leading-tight truncate">{item.title}</p>
+                        {(item.date || item.time) && (
+                          <p className="text-[11px] text-royal font-semibold mt-0.5">
+                            {item.date}{item.date && item.time ? ' — ' : ''}{item.time}
+                          </p>
+                        )}
+                        {item.description && (
+                          <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{item.description}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1 shrink-0 mt-0.5">
+                        <button onClick={() => openEdit(i)}
+                          className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-royal hover:bg-royal/8 transition-all cursor-pointer">
+                          <Pencil size={11} />
+                        </button>
+                        <button onClick={() => handleDelete(i)}
+                          className="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer">
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Quick actions + Activity */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Quick actions */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-            <h3 className="text-sm font-bold text-dark mb-3 flex items-center gap-2">
-              <Zap size={14} className="text-amber-500" /> Quick Actions
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {[
-                [Mail,     'Send Announcement', () => showToast('Email composer opened'),        'text-royal bg-royal/5 hover:bg-royal/10 border-royal/15'],
-                [Download, 'Export CSV',         () => showToast('CSV downloaded'),              'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-100'],
-                [Copy,     'Copy Reg. Link',      () => showToast('Link copied!'),               'text-violet-700 bg-violet-50 hover:bg-violet-100 border-violet-100'],
-                [BarChart2,'Download Report',    () => showToast('Report generated'),            'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-100'],
-              ].map(([Icon, label, fn, cls]) => (
-                <button key={label} onClick={fn}
-                  className={`flex flex-col items-start gap-2 px-3 py-3 rounded-xl border ${cls} text-xs font-semibold transition-all cursor-pointer`}>
-                  <Icon size={14} className="shrink-0" />{label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent activity */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-            <h3 className="text-sm font-bold text-dark mb-3 flex items-center gap-2">
-              <TrendingUp size={14} className="text-violet-500" /> Recent Activity
-            </h3>
-            <div className="space-y-3">
-              {activity.length === 0 && <span className="text-xs text-gray-500 italic">No activity yet.</span>}
-              {activity.map((a, i) => (
-                <div key={a._id || i} className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0" style={{ background: avBg(a.actor) }}>
-                    {initials(a.actor)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-700"><b>{a.actor}</b> {a.action}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{a.time}</p>
-                  </div>
-                  <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: activityDot[a.type] || activityDot.update }} />
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Generate QR Codes — full width beside timeline */}
+        <div className="lg:col-span-2">
+          <GenerateQRCodeSection
+            hackathonId={hackathonId}
+            hackName={hack.title}
+          />
         </div>
       </div>
 
@@ -281,12 +378,26 @@ function ParticipantsTab({ participants, showToast }) {
   const PER = 5;
 
   const filtered = participants.filter(r =>
-    (!search || [r.name, r.email, r.college].some(v => v?.toLowerCase().includes(search.toLowerCase()))) &&
+    (!search || [r.leaderName, r.leaderEmail, r.college, r.teamName].some(v => v?.toLowerCase().includes(search.toLowerCase()))) &&
     (!filter || r.status === filter)
   );
   const paged = filtered.slice(page * PER, page * PER + PER);
   const pages = Math.max(1, Math.ceil(filtered.length / PER));
   const toggleSel = id => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+
+  const handleShortlist = async (reg) => {
+    try {
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch(`http://localhost:5000/api/registrations/shortlist/${reg._id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) showToast(`${reg.teamName} shortlisted!`);
+      else showToast('Shortlist failed.');
+    } catch {
+      showToast('Network error.');
+    }
+  };
 
   return (
     <div>
@@ -344,7 +455,7 @@ function ParticipantsTab({ participants, showToast }) {
                 <th className="p-3">
                   <input type="checkbox" className="accent-royal" checked={selected.length === paged.length && paged.length > 0} onChange={() => setSelected(s => s.length === paged.length ? [] : paged.map(r => r.id))} />
                 </th>
-                {['Name', 'Email', 'College', 'Team', 'Status', 'Joined', ''].map(h => (
+                {['Team', 'Leader', 'College', 'AI Score', 'Resume', 'Shortlist', ''].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -354,19 +465,57 @@ function ParticipantsTab({ participants, showToast }) {
                 <tr className="border-b border-gray-50 text-center"><td colSpan="8" className="px-4 py-8 text-sm text-gray-500 italic">No participants found.</td></tr>
               )}
               {paged.map(r => (
-                <tr key={r.participantId || r._id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
-                  <td className="p-3"><input type="checkbox" className="accent-royal" checked={selected.includes(r.participantId || r._id)} onChange={() => toggleSel(r.participantId || r._id)} onClick={e => e.stopPropagation()} /></td>
-                  <td className="px-3 py-3 cursor-pointer" onClick={() => setDrawer(r)}>
+                <tr key={r._id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
+                  <td className="p-3"><input type="checkbox" className="accent-royal" checked={selected.includes(r._id)} onChange={() => toggleSel(r._id)} onClick={e => e.stopPropagation()} /></td>
+                  {/* Team name */}
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0" style={{ background: avBg(r.name) }}>{initials(r.name)}</div>
-                      <span className="text-sm font-semibold text-dark">{r.name}</span>
+                      <div className="w-7 h-7 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0" style={{ background: avBg(r.teamName || 'T') }}>{(r.teamName || 'T')[0].toUpperCase()}</div>
+                      <span className="text-sm font-semibold text-dark">{r.teamName}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-xs text-gray-500">{r.email}</td>
+                  {/* Leader */}
+                  <td className="px-3 py-3">
+                    <p className="text-xs font-medium text-dark">{r.leaderName}</p>
+                    <p className="text-[11px] text-gray-400">{r.leaderEmail}</p>
+                  </td>
+                  {/* College */}
                   <td className="px-3 py-3 text-xs text-gray-500">{r.college}</td>
-                  <td className="px-3 py-3"><span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">{r.team}</span></td>
-                  <td className="px-3 py-3"><SBadge s={r.status} /></td>
-                  <td className="px-3 py-3 text-xs text-gray-400">{r.joined}</td>
+                  {/* AI Score */}
+                  <td className="px-3 py-3">
+                    {r.aiScore != null ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style={{ color: sColor(r.aiScore), background: sBg(r.aiScore) }}>
+                        {r.aiScore}/100
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300 italic">No resume</span>
+                    )}
+                  </td>
+                  {/* Resume link */}
+                  <td className="px-3 py-3">
+                    {r.resumeUrl ? (
+                      <a href={`http://localhost:5000${r.resumeUrl}`} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-2.5 py-1 rounded-lg border border-royal/20 text-royal hover:bg-royal/5 transition-colors font-semibold">
+                        View
+                      </a>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </td>
+                  {/* Shortlist */}
+                  <td className="px-3 py-3">
+                    {r.shortlisted ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                        <CheckCircle2 size={10} /> Shortlisted
+                      </span>
+                    ) : (
+                      <button onClick={() => handleShortlist(r)}
+                        className="text-xs px-2.5 py-1 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors font-semibold cursor-pointer">
+                        Shortlist
+                      </button>
+                    )}
+                  </td>
+                  {/* View drawer */}
                   <td className="px-3 py-3"><button onClick={() => setDrawer(r)} className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:border-royal hover:text-royal transition-colors cursor-pointer"><Eye size={12} /></button></td>
                 </tr>
               ))}
@@ -556,39 +705,67 @@ function SettingsTab({ hack, showToast }) {
 
 /* ─── MAIN ─── */
 export default function ManageHackathon() {
-  const { id: hackathonIdParam } = useParams();
-  const hackathonId = hackathonIdParam || 'HF-001';
+  const { slug } = useParams();
+  const hackathonSlug = slug || null;
 
   const [sbOpen, setSbOpen] = useState(true);
   const [tab, setTab]       = useState('overview');
   const [toast, setToast]   = useState(null);
 
-  const [hackData, setHackData] = useState(DEFAULT_HACK);
+  const [hackData, setHackData]       = useState(null);  // null = not loaded yet
+  const [loading, setLoading]         = useState(true);
   const [participants, setParticipants] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [activities, setActivities] = useState([]);
+  const [teams, setTeams]             = useState([]);
+  const [activities, setActivities]   = useState([]);
 
-  const fetchData = async () => {
+  async function loadHackathon(targetSlug) {
     const token = localStorage.getItem('hf_token');
+    setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/organizer/hackathons/${hackathonId}`, {
+      const res = await fetch(`http://localhost:5000/api/organizer/hackathons/${targetSlug}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setHackData(data.hackathon || DEFAULT_HACK);
+        setHackData(data.hackathon || null);
         setParticipants(data.participants || []);
         setTeams(data.teams || []);
         setActivities(data.activities || []);
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const fetchData = async () => {
+    const token = localStorage.getItem('hf_token');
+    if (hackathonSlug) {
+      await loadHackathon(hackathonSlug);
+    } else {
+      // No slug in URL — load organizer's first hackathon
+      try {
+        const listRes = await fetch('http://localhost:5000/api/organizer/hackathons', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const first = (listData.data || [])[0];
+          if (first?.slug) {
+            await loadHackathon(first.slug);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, [hackathonId]);
+  }, [hackathonSlug]);
+
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
@@ -604,7 +781,10 @@ export default function ManageHackathon() {
           <div className="flex items-center gap-2 text-sm">
             <Link to="/organizer-dashboard" className="text-gray-400 hover:text-royal transition-colors">Dashboard</Link>
             <ChevronRight size={13} className="text-gray-300" />
-            <span className="font-semibold text-dark truncate max-w-[240px]">{hackData.title || ''}</span>
+            {loading
+              ? <div className="h-4 w-40 bg-gray-200 animate-pulse rounded" />
+              : <span className="font-semibold text-dark truncate max-w-[240px]">{hackData?.title || ''}</span>
+            }
           </div>
           <div className="flex items-center gap-2">
             <Link to="/organizer/ppt-review"
@@ -615,19 +795,70 @@ export default function ManageHackathon() {
         </div>
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-          <HackHeader hack={hackData} showToast={showToast} />
-          <StatsRow hack={hackData} teams={teams} setTab={setTab} />
-
-          {/* Tab card */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] overflow-hidden">
-            <TabBar active={tab} set={setTab} />
-            <div className="p-6">
-              {tab === 'overview'     && <OverviewTab hack={hackData} activity={activities} showToast={showToast} />}
-              {tab === 'participants' && <ParticipantsTab participants={participants} showToast={showToast} />}
-              {tab === 'teams'        && <TeamsTab teams={teams} />}
-              {tab === 'settings'     && <SettingsTab hack={hackData} showToast={showToast} />}
+          {loading ? (
+            /* ── Skeleton screen ── */
+            <div className="animate-pulse space-y-5">
+              {/* Header skeleton */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                <div className="h-3 w-24 bg-gray-200 rounded mb-4" />
+                <div className="h-6 w-64 bg-gray-200 rounded mb-3" />
+                <div className="flex gap-4">
+                  <div className="h-3 w-32 bg-gray-100 rounded" />
+                  <div className="h-3 w-28 bg-gray-100 rounded" />
+                  <div className="h-3 w-28 bg-gray-100 rounded" />
+                </div>
+              </div>
+              {/* Stats skeleton */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="h-9 w-9 bg-gray-200 rounded-xl mb-3" />
+                    <div className="h-7 w-12 bg-gray-200 rounded mb-1" />
+                    <div className="h-3 w-20 bg-gray-100 rounded" />
+                  </div>
+                ))}
+              </div>
+              {/* Tab card skeleton */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="flex gap-0 border-b border-gray-100 px-2">
+                  {[1,2,3,4].map(i => <div key={i} className="h-12 w-24 bg-gray-100 rounded mx-1 my-2" />)}
+                </div>
+                <div className="p-6 space-y-3">
+                  <div className="h-4 w-48 bg-gray-200 rounded" />
+                  <div className="h-3 w-full bg-gray-100 rounded" />
+                  <div className="h-3 w-3/4 bg-gray-100 rounded" />
+                </div>
+              </div>
             </div>
-          </div>
+          ) : hackData ? (
+            <>
+              <HackHeader hack={hackData} showToast={showToast} />
+              <StatsRow hack={hackData} teams={teams} setTab={setTab} />
+              {/* Tab card */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] overflow-hidden">
+                <TabBar active={tab} set={setTab} />
+                <div className="p-6">
+                  {tab === 'overview'     && <OverviewTab hack={hackData} activity={activities} showToast={showToast} hackathonId={hackData.hackathonId || hackathonSlug || hackData.slug} />}
+                  {tab === 'participants' && <ParticipantsTab participants={participants} showToast={showToast} />}
+                  {tab === 'teams'        && <TeamsTab teams={teams} />}
+                  {tab === 'settings'     && <SettingsTab hack={hackData} showToast={showToast} />}
+                </div>
+              </div>
+            </>
+          ) : (
+            /* No hackathon found */
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                <ClipboardList size={28} className="text-gray-300" />
+              </div>
+              <p className="text-lg font-bold text-gray-400">No hackathon found</p>
+              <p className="text-sm text-gray-300 mt-1 mb-5">You haven't created any hackathons yet.</p>
+              <Link to="/organizer/create"
+                className="px-6 py-2.5 rounded-xl bg-royal text-white text-sm font-bold hover:bg-blue-700 transition-all shadow-sm">
+                + Create Hackathon
+              </Link>
+            </div>
+          )}
         </main>
       </div>
     </div>

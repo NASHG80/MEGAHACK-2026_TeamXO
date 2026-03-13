@@ -9,6 +9,10 @@ import OrganizerSidebar from '../../components/OrganizerSidebar';
 
 const API = 'http://localhost:5000/api';
 const getToken = () => localStorage.getItem('hf_token');
+const getUser  = () => ({
+  name:  localStorage.getItem('hf_name')  || 'Organizer',
+  email: localStorage.getItem('hf_email') || '',
+});
 
 /* ─── STATUS CONFIG ─── */
 const STATUS_MAP = {
@@ -67,6 +71,7 @@ export default function OrganizerProfile() {
   const [avatar, setAvatar]     = useState(null);
   const avatarRef               = useRef();
   const docRef                  = useRef();
+  const { name: userName, email: userEmail } = getUser();
 
   /* Derive status */
   const status = !verification ? 'unverified' : verification.status;
@@ -252,8 +257,11 @@ export default function OrganizerProfile() {
                   </button>
                   <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                 </div>
-                <p className="font-extrabold text-dark text-base">{form.clubName || 'Your Club Name'}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{form.college || 'Your College'}</p>
+                <p className="font-extrabold text-dark text-base">{userName}</p>
+                <p className="text-xs text-royal/70 mt-0.5 font-medium">{userEmail}</p>
+                {form.clubName && (
+                  <p className="text-xs text-gray-400 mt-0.5">{form.clubName}{form.college ? ` · ${form.college}` : ''}</p>
+                )}
                 <span className={`mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ring-1 ${stCls}`}>
                   <StIcon size={11} />{stLabel}
                 </span>
