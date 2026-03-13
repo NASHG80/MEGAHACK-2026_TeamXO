@@ -13,12 +13,71 @@ const crypto       = require('crypto');
    ─────────────────────────────────────────── */
 exports.getMyLiveEvent = async (req, res) => {
   try {
+    const EventWorkspace = require('../models/EventWorkspace');
+
     const event = await LiveEvent.findOne({ student: req.user.id })
-      .populate('hackathon', 'title organizerName venue date time status')
+      .populate('hackathon', 'title organizerName venue date time status slug')
       .populate('student', 'name email');
 
     if (!event) {
       return res.status(404).json({ message: 'No live event found for this student' });
+    }
+
+    // ── Look up the organizer-assigned workspace from EventWorkspace ──────
+    // The organizer assigns teams in EventManagement → stored in EventWorkspace.assignedTeams
+    // TeamId format used there: "REG-{registration._id}"
+    let workspaceNumber   = event.workspaceNumber;
+    let workspaceLocation = event.workspaceLocation;
+
+    try {
+      const hackathonId = event.hackathon._id;
+      const hackSlug    = event.hackathon.slug || hackathonId.toString();
+
+      // Find the student's registration to get the REG-{id} teamId
+      const studentEmail = event.student.email;
+      const reg = await Registration.findOne({
+        hackathon: hackathonId,
+        $or: [
+          { leaderEmail:          studentEmail },
+          { 'teamMembers.email':  studentEmail },
+        ],
+      }).select('_id').lean();
+
+      if (reg) {
+        const teamId = `REG-${reg._id}`;
+
+        // Search all workspaces for this hackathon (by id or slug)
+        const allWorkspaces = await EventWorkspace.find({
+          $or: [
+            { hackathonId: hackathonId.toString() },
+            { hackathonId: hackSlug },
+          ],
+        }).lean();
+
+        for (const ws of allWorkspaces) {
+          const assignment = ws.assignedTeams?.find(t => t.teamId === teamId);
+          if (assignment) {
+            // Format: "Lab 1" + slot badges like "WS-01"
+            const slotLabel = assignment.slots?.length
+              ? assignment.slots.map(s => `WS-${String(s + 1).padStart(2, '0')}`).join(', ')
+              : '';
+            workspaceNumber   = slotLabel ? `${ws.number} · ${slotLabel}` : ws.number;
+            workspaceLocation = `${ws.floor}${ws.note ? ' · ' + ws.note : ''}`;
+
+            // Persist back to LiveEvent so /self-scan can return it too
+            if (workspaceNumber !== event.workspaceNumber || workspaceLocation !== event.workspaceLocation) {
+              await LiveEvent.updateOne(
+                { _id: event._id },
+                { $set: { workspaceNumber, workspaceLocation } }
+              );
+            }
+            break;
+          }
+        }
+      }
+    } catch (wsErr) {
+      console.warn('[getMyLiveEvent] Could not resolve EventWorkspace:', wsErr.message);
+      // Fall through — use whatever is already in the LiveEvent document
     }
 
     res.json({
@@ -30,8 +89,8 @@ exports.getMyLiveEvent = async (req, res) => {
       venue:             event.hackathon.venue,
       date:              event.hackathon.date,
       time:              event.hackathon.time,
-      workspaceNumber:   event.workspaceNumber,
-      workspaceLocation: event.workspaceLocation,
+      workspaceNumber,
+      workspaceLocation,
       entryStatus:       event.entryStatus,
       lunchStatus:       event.lunchStatus,
       dinnerStatus:      event.dinnerStatus,
