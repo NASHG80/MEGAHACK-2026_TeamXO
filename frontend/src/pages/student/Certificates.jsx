@@ -1,67 +1,32 @@
-import { useState } from 'react';
-import { Award, Download, Eye, Calendar, Search, FileX } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Award, Download, Eye, Calendar, Search, FileX, Loader2 } from 'lucide-react';
 import StudentNavbar from '../../components/StudentNavbar';
 
-/* ─────────────────────── MOCK DATA ─────────────────────── */
+const API_BASE = 'http://localhost:5000';
 
-const mockCertificates = [
-  {
-    certificateId: 'cert_001',
-    hackathonTitle: 'BuildFest 2025',
-    certificateUrl: '#',
-    issueDate: 'November 20, 2025',
-    organizer: 'IIT Delhi',
-    rank: '2nd Place',
-    badgeColor: 'from-amber-400 to-amber-600',
-    accentColor: 'border-amber-300',
-  },
-  {
-    certificateId: 'cert_002',
-    hackathonTitle: 'HackIndia 2025',
-    certificateUrl: '#',
-    issueDate: 'August 5, 2025',
-    organizer: 'NASSCOM',
-    rank: 'Participant',
-    badgeColor: 'from-royal to-royal-light',
-    accentColor: 'border-blue-300',
-  },
-  {
-    certificateId: 'cert_003',
-    hackathonTitle: 'DataThon Winter \'24',
-    certificateUrl: '#',
-    issueDate: 'December 18, 2024',
-    organizer: 'Google DSC',
-    rank: '3rd Place',
-    badgeColor: 'from-emerald-400 to-emerald-600',
-    accentColor: 'border-emerald-300',
-  },
-];
+/* ─────────────────────── badge colours by rank ───────────────────── */
+function badgeForRank(rank = '') {
+  const r = rank.toLowerCase();
+  if (r.includes('1st') || r === 'winner')  return { badgeColor: 'from-yellow-400 to-amber-500',   accentColor: 'border-amber-300' };
+  if (r.includes('2nd'))                    return { badgeColor: 'from-amber-400 to-amber-600',     accentColor: 'border-amber-300' };
+  if (r.includes('3rd'))                    return { badgeColor: 'from-emerald-400 to-emerald-600', accentColor: 'border-emerald-300' };
+  return                                           { badgeColor: 'from-royal to-blue-500',          accentColor: 'border-blue-300' };
+}
 
-/* ─────────────────────── CERTIFICATE CARD ─────────────────── */
-
+/* ─────────────────────── CERTIFICATE CARD ─────────────────────── */
 function CertificateCard({ cert }) {
-  const [hovered, setHovered] = useState(false);
+  const { badgeColor } = badgeForRank(cert.rank);
 
   return (
-    <div
-      className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(30,58,138,0.1)] hover:-translate-y-1 transition-all duration-300 overflow-hidden group"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(30,58,138,0.1)] hover:-translate-y-1 transition-all duration-300 overflow-hidden group">
       {/* Certificate Preview Area */}
-      <div className={`relative h-40 bg-linear-to-br ${cert.badgeColor} flex flex-col items-center justify-center gap-2 overflow-hidden`}>
-        {/* Decorative rings */}
+      <div className={`relative h-40 bg-gradient-to-br ${badgeColor} flex flex-col items-center justify-center gap-2 overflow-hidden`}>
         <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/10" />
         <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-white/10" />
-
-        {/* Cert Icon */}
         <div className="relative w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
           <Award size={30} className="text-white" />
         </div>
-
         <span className="relative text-white/90 text-xs font-bold uppercase tracking-widest">Certificate of Achievement</span>
-
-        {/* Rank badge */}
         <span className="relative inline-block px-3 py-1 rounded-full bg-white/20 text-white text-[11px] font-bold border border-white/30">
           {cert.rank}
         </span>
@@ -83,21 +48,27 @@ function CertificateCard({ cert }) {
 
         {/* Action Buttons */}
         <div className="flex gap-2">
-          <a
-            href={cert.certificateUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-royal border-2 border-royal/20 hover:bg-royal hover:text-white hover:border-royal transition-all duration-200 cursor-pointer"
-          >
-            <Eye size={14} /> View
-          </a>
-          <a
-            href={cert.certificateUrl}
-            download
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-white bg-royal hover:bg-royal-light transition-all duration-200 shadow-md hover:shadow-lg cursor-pointer"
-          >
-            <Download size={14} /> Download
-          </a>
+          {cert.certificateUrl ? (
+            <>
+              <a
+                href={`${API_BASE}${cert.certificateUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-royal border-2 border-royal/20 hover:bg-royal hover:text-white hover:border-royal transition-all duration-200 cursor-pointer"
+              >
+                <Eye size={14} /> View
+              </a>
+              <a
+                href={`${API_BASE}${cert.certificateUrl}`}
+                download
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-white bg-royal hover:bg-royal-light transition-all duration-200 shadow-md hover:shadow-lg cursor-pointer"
+              >
+                <Download size={14} /> Download
+              </a>
+            </>
+          ) : (
+            <span className="flex-1 text-center py-2.5 text-xs text-gray-400 italic">File processing…</span>
+          )}
         </div>
       </div>
     </div>
@@ -105,7 +76,6 @@ function CertificateCard({ cert }) {
 }
 
 /* ─────────────────────── EMPTY STATE ───────────────────── */
-
 function EmptyState() {
   return (
     <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
@@ -121,11 +91,34 @@ function EmptyState() {
 }
 
 /* ─────────────────────── CERTIFICATES PAGE ───────────────── */
-
 export default function Certificates() {
-  const [search, setSearch] = useState('');
+  const [certificates, setCertificates] = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
+  const [search, setSearch]             = useState('');
 
-  const filtered = mockCertificates.filter(c =>
+  useEffect(() => {
+    const fetchCertificates = async () => {
+      try {
+        const token = localStorage.getItem('hf_token');
+        const res = await fetch(`${API_BASE}/api/certificates/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const data = await res.json();
+        setCertificates(data.certificates || []);
+      } catch (err) {
+        console.error('Failed to load certificates:', err);
+        setError('Could not load your certificates. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCertificates();
+  }, []);
+
+  const filtered = certificates.filter(c =>
     c.hackathonTitle.toLowerCase().includes(search.toLowerCase()) ||
     c.organizer.toLowerCase().includes(search.toLowerCase())
   );
@@ -145,7 +138,11 @@ export default function Certificates() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-dark tracking-tight">
               Your <span className="text-royal">Certificates</span>
             </h1>
-            <p className="text-sm text-gray-500 mt-1">{mockCertificates.length} certificate{mockCertificates.length !== 1 ? 's' : ''} earned</p>
+            {!loading && !error && (
+              <p className="text-sm text-gray-500 mt-1">
+                {certificates.length} certificate{certificates.length !== 1 ? 's' : ''} earned
+              </p>
+            )}
           </div>
 
           {/* Search */}
@@ -163,10 +160,21 @@ export default function Certificates() {
 
         {/* Certificate Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.length > 0
-            ? filtered.map(cert => <CertificateCard key={cert.certificateId} cert={cert} />)
-            : <EmptyState />
-          }
+          {loading ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-24 gap-4 text-gray-400">
+              <Loader2 size={32} className="animate-spin text-royal" />
+              <p className="text-sm font-medium">Loading your certificates…</p>
+            </div>
+          ) : error ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-24 text-center gap-3">
+              <FileX size={32} className="text-red-300" />
+              <p className="text-sm text-red-500 font-medium">{error}</p>
+            </div>
+          ) : filtered.length > 0 ? (
+            filtered.map(cert => <CertificateCard key={cert.certificateId} cert={cert} />)
+          ) : (
+            <EmptyState />
+          )}
         </div>
 
       </div>
