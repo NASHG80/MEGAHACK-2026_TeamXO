@@ -1,0 +1,195 @@
+const OrganizerVerification = require('../models/OrganizerVerification');
+const User = require('../models/User');
+
+/* ────────────────────────────────────────────────────────────────────────────
+   POST /api/organizer/verification
+   Submit or update a verification request (organizer only)
+──────────────────────────────────────────────────────────────────────────── */
+const submitVerification = async (req, res) => {
+  try {
+    const { clubName, college, linkedin, website } = req.body;
+
+    if (!clubName || !college) {
+      return res.status(400).json({ message: 'Club name and college are required' });
+    }
+
+    const proofDocument     = req.file ? req.file.originalname : null;
+    const proofDocumentPath = req.file ? req.file.path        : null;
+
+    // Upsert: if organizer already has a request, update it (allow resubmission after rejection)
+    const existing = await OrganizerVerification.findOne({ organizerId: req.user.id });
+
+    if (existing && existing.status === 'pending') {
+      return res.status(400).json({ message: 'Your verification is already under review' });
+    }
+    if (existing && existing.status === 'approved') {
+      return res.status(400).json({ message: 'Your organizer account is already verified' });
+    }
+
+    // If rejected or no request yet — create / update
+    const verification = await OrganizerVerification.findOneAndUpdate(
+      { organizerId: req.user.id },
+      {
+        organizerId: req.user.id,
+        clubName,
+        college,
+        linkedin:   linkedin || '',
+        website:    website  || '',
+        ...(proofDocument && { proofDocument, proofDocumentPath }),
+        status:     'pending',
+        reviewedBy: null,
+        reviewedAt: null,
+        rejectionReason: null,
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+
+    res.status(201).json({ message: 'Verification request submitted', verification });
+  } catch (err) {
+    console.error('[submitVerification]', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GET /api/organizer/verification/me
+   Get the logged-in organizer's own verification status
+──────────────────────────────────────────────────────────────────────────── */
+const getMyVerification = async (req, res) => {
+  try {
+    const verification = await OrganizerVerification.findOne({ organizerId: req.user.id });
+    res.json({ verification: verification || null });
+  } catch (err) {
+    console.error('[getMyVerification]', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GET /api/admin/verifications
+   Get all verification requests (admin only), supports ?status= filter
+──────────────────────────────────────────────────────────────────────────── */
+const getAllVerifications = async (req, res) => {
+  try {
+    const filter = req.query.status ? { status: req.query.status } : {};
+    const verifications = await OrganizerVerification.find(filter)
+      .populate('organizerId', 'name email')
+      .sort({ createdAt: -1 });
+    res.json({ verifications });
+  } catch (err) {
+    console.error('[getAllVerifications]', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   PATCH /api/admin/verifications/:id/review
+   Approve or reject a verification (admin only)
+   Body: { action: 'approve' | 'reject', rejectionReason? }
+──────────────────────────────────────────────────────────────────────────── */
+const reviewVerification = async (req, res) => {
+  try {
+    const { action, rejectionReason } = req.body;
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ message: 'action must be "approve" or "reject"' });
+    }
+
+    const verification = await OrganizerVerification.findById(req.params.id);
+    if (!verification) {
+      return res.status(404).json({ message: 'Verification request not found' });
+    }
+    if (verification.status !== 'pending') {
+      return res.status(400).json({ message: 'This request has already been reviewed' });
+    }
+
+    verification.status      = action === 'approve' ? 'approved' : 'rejected';
+    verification.reviewedBy  = 'admin';
+    verification.reviewedAt  = new Date();
+    if (action === 'reject' && rejectionReason) {
+      verification.rejectionReason = rejectionReason;
+    }
+    await verification.save();
+
+    // If approved — set orgVerified on User (not isVerified which is for email OTP)
+    if (action === 'approve') {
+      await User.findByIdAndUpdate(verification.organizerId, { orgVerified: true });
+    }
+    // If rejected — ensure orgVerified is false
+    if (action === 'reject') {
+      await User.findByIdAndUpdate(verification.organizerId, { orgVerified: false });
+    }
+
+    res.json({ message: `Verification ${action}d`, verification });
+  } catch (err) {
+    console.error('[reviewVerification]', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GET /api/admin/stats
+   Platform summary counts (admin only)
+──────────────────────────────────────────────────────────────────────────── */
+const getAdminStats = async (req, res) => {
+  try {
+    const [totalStudents, totalOrganizers, pendingVerifications] = await Promise.all([
+      User.countDocuments({ role: 'student' }),
+      User.countDocuments({ role: 'organizer' }),
+      OrganizerVerification.countDocuments({ status: 'pending' }),
+    ]);
+    res.json({ totalStudents, totalOrganizers, pendingVerifications });
+  } catch (err) {
+    console.error('[getAdminStats]', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   GET /api/admin/users?role=student|organizer
+   List all users of a given role (admin only)
+──────────────────────────────────────────────────────────────────────────── */
+const getUsers = async (req, res) => {
+  try {
+    const role = req.query.role;
+    
+    // If requesting organizers, join with OrganizerVerification to get club/college
+    if (role === 'organizer') {
+      const users = await User.aggregate([
+        { $match: { role: 'organizer' } },
+        {
+          $lookup: {
+            from: 'organizerverifications', // MongoDB collection name for OrganizerVerification
+            localField: '_id',
+            foreignField: 'organizerId',
+            as: 'verification'
+          }
+        },
+        // Unwind to easily access fields (preserves existing flat structure)
+        { $unwind: { path: '$verification', preserveNullAndEmptyArrays: true } },
+        { $sort: { createdAt: -1 } },
+        // Exclude passwords
+        { $project: { password: 0, otp: 0, otpExpiry: 0, otpSentAt: 0 } }
+      ]);
+      return res.json({ users });
+    }
+
+    // Default for students or mixed
+    const filter = role ? { role } : {};
+    const users = await User.find(filter)
+      .select('-password -otp -otpExpiry -otpSentAt')
+      .sort({ createdAt: -1 });
+    res.json({ users });
+  } catch (err) {
+    console.error('[getUsers]', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = {
+  submitVerification,
+  getMyVerification,
+  getAllVerifications,
+  reviewVerification,
+  getAdminStats,
+  getUsers,
+};
