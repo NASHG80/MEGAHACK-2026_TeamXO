@@ -9,7 +9,7 @@ const { extractResumeText, getAIScore } = require('../services/ai_service/resume
 ───────────────────────────────────────────────────────────── */
 const registerTeam = async (req, res) => {
   try {
-    const { hackathonId, teamName, leaderName, leaderEmail, college, teamMembers } = req.body;
+    const { hackathonId, teamName, leaderName, leaderEmail, college, teamMembers, domain, psId } = req.body;
     if (!hackathonId || !teamName || !leaderName || !leaderEmail || !college) {
       return res.status(400).json({ success: false, message: 'Missing required fields.' });
     }
@@ -20,6 +20,7 @@ const registerTeam = async (req, res) => {
     const registration = await Registration.create({
       hackathon: hackathonId, teamName, leaderName, leaderEmail, college,
       teamMembers: teamMembers || [],
+      domain: domain || '', psId: psId || '',
     });
     res.status(201).json({ success: true, message: 'Registration successful!', data: registration });
   } catch (error) {
@@ -39,7 +40,7 @@ const registerWithResume = async (req, res) => {
   console.log('  file:', req.file ? req.file.filename : 'none');
 
   try {
-    const { hackathonId, teamName, leaderName, leaderEmail, college, teamMembers } = req.body;
+    const { hackathonId, teamName, leaderName, leaderEmail, college, teamMembers, domain, psId } = req.body;
 
     if (!hackathonId || !teamName || !leaderName || !leaderEmail || !college) {
       return res.status(400).json({ success: false, message: 'Missing required fields.' });
@@ -68,6 +69,8 @@ const registerWithResume = async (req, res) => {
       resumeUrl,
       extractedText: null,
       aiScore:       null,
+      domain:        domain || '',
+      psId:          psId   || '',
     });
     console.log('[registerWithResume] ✅ Saved instantly! ID:', registration._id);
 

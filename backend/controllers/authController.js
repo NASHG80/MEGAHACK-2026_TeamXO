@@ -154,7 +154,7 @@ exports.register = async (req, res) => {
     user.role = role;
     await user.save();
 
-    const token = signToken({ id: user._id, role: user.role });
+    const token = signToken({ id: user._id, role: user.role, name: user.name, email: user.email });
 
     return ok(res, 201, {
       message: "Account created successfully.",
@@ -192,7 +192,7 @@ exports.login = async (req, res) => {
       return fail(res, 401, "Invalid email or password.");
     }
 
-    const token = signToken({ id: user._id, role: user.role });
+    const token = signToken({ id: user._id, role: user.role, name: user.name, email: user.email });
 
     return ok(res, 200, {
       message: "Login successful.",

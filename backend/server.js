@@ -40,6 +40,7 @@ app.use("/api/organizer/events",  require("./routes/eventRoutes"));
 app.use("/api/organizer/cocom",   require("./routes/cocomRoutes"));
 app.use("/api/certificates",      require("./routes/certificateRoutes"));
 app.use("/api/registrations",     require("./routes/registrationRoutes"));
+app.use("/api/teams",             require("./routes/teamRoutes"));
 app.use("/api",                   require("./routes/verification"));   // mounts /api/organizer/verification + /api/admin/*
 app.use("/api/registrations",     require("./routes/registrationRoutes"));
 

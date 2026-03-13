@@ -359,7 +359,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* ── My Activity ── */}
+        {/* ── My Activity ──
         <section className="bg-gray-50/50 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-12 border-t border-gray-100">
           <div className="max-w-5xl mx-auto">
             <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
@@ -367,7 +367,7 @@ export default function Dashboard() {
             </h2>
             <ActivityTabs />
           </div>
-        </section>
+        </section> */}
         
       </div>
     </div>
