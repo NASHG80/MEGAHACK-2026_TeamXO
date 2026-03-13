@@ -279,7 +279,7 @@ function OverviewTab({ hack }) {
                   </p>
                 </div>
                 <a
-                  href={`http://localhost:5000/${hack.problemStatement.downloadUrl}`}
+                  href={hack.problemStatement.downloadUrl?.startsWith('data:') ? hack.problemStatement.downloadUrl : `http://localhost:5000/${hack.problemStatement.downloadUrl}`}
                   download
                   target="_blank"
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-gray-200 text-xs font-bold text-gray-600 hover:border-royal hover:text-royal hover:bg-royal/5 transition-all shadow-sm shrink-0 group-hover:border-royal group-hover:text-royal"
@@ -598,7 +598,7 @@ export default function HackathonDetails() {
           {/* Banner */}
           <div className="w-full h-56 bg-gray-100 flex items-center justify-center overflow-hidden relative">
             {hack.bannerImage
-              ? <img src={`http://localhost:5000/${hack.bannerImage}`} alt={hack.title} className="w-full h-full object-cover" />
+              ? <img src={hack.bannerImage} alt={hack.title} className="w-full h-full object-cover" />
               : <span className="text-gray-200 text-[120px] font-black select-none">{hack.title[0]}</span>
             }
           </div>
@@ -609,7 +609,7 @@ export default function HackathonDetails() {
             {/* Logo — overlapping-style, pulled up */}
             <div className="w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-2xl shrink-0 shadow-lg -mt-5 border-4 border-white overflow-hidden bg-gray-100 flex items-center justify-center relative z-10">
               {hack.logoImage
-                ? <img src={`http://localhost:5000/${hack.logoImage}`} alt={hack.organizerName} className="w-full h-full object-cover" />
+                ? <img src={hack.logoImage} alt={hack.organizerName} className="w-full h-full object-cover" />
                 : <span className="text-gray-400 font-black text-xl">{hack.organizerName?.[0] ?? hack.title[0]}</span>
               }
             </div>

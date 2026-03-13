@@ -9,6 +9,10 @@ import {
   Calendar,
   Check,
   MonitorPlay,
+  Trophy,
+  CalendarDays,
+  ArrowRight,
+  Zap,
 } from 'lucide-react';
 import axios from 'axios';
 import StudentNavbar from '../../components/StudentNavbar';
@@ -28,6 +32,68 @@ const mockRegistered = [
 const mockOngoing = [];
 const mockCertificates = [];
 
+/* ────────────────── LIVE HACKATHON CARD ──────────────────── */
+function LiveHackathonCard({ hackathon }) {
+  const navigate = useNavigate();
+  const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'TBD';
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden flex flex-col cursor-pointer group"
+      onClick={() => navigate(`/student/hackathon/${hackathon.slug}`)}>
+      {/* Green top strip */}
+      <div className="h-1 bg-gradient-to-r from-emerald-400 to-green-500" />
+
+      <div className="p-5 flex flex-col flex-1 gap-3">
+        {/* Logo + LIVE badge */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="w-12 h-12 rounded-xl bg-gray-100 border border-gray-200 shrink-0 flex items-center justify-center overflow-hidden">
+            {hackathon.logoImage
+              ? <img src={`http://localhost:5000/${hackathon.logoImage}`} alt="" className="w-full h-full object-cover" />
+              : <span className="text-xl font-extrabold text-gray-400">{hackathon.title?.[0]}</span>}
+          </div>
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> LIVE
+          </span>
+        </div>
+
+        {/* Title + organizer */}
+        <div>
+          <h3 className="font-bold text-gray-900 leading-snug text-sm line-clamp-2">{hackathon.title}</h3>
+          <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+            <Building2 size={10} /> {hackathon.organizerName}
+          </p>
+        </div>
+
+        {/* Dates */}
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+            <p className="text-gray-400 font-medium">Start</p>
+            <p className="font-bold text-gray-700">{fmt(hackathon.startDate)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+            <p className="text-gray-400 font-medium">End</p>
+            <p className="font-bold text-gray-700">{fmt(hackathon.endDate)}</p>
+          </div>
+        </div>
+
+        {/* Prize pool */}
+        {hackathon.prizePool && (
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700">
+            <Trophy size={12} /> {hackathon.prizePool} in prizes
+          </div>
+        )}
+
+        {/* View Details */}
+        <button
+          onClick={e => { e.stopPropagation(); navigate(`/student/hackathon/${hackathon.slug}`); }}
+          className="mt-auto w-full py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-sm hover:shadow-md hover:opacity-90 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+          View Details <ArrowRight size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────── HACKATHON LIST CARD (REDESIGNED) ─────────────────── */
 
 function HackathonListCard({ hackathon }) {
@@ -35,13 +101,13 @@ function HackathonListCard({ hackathon }) {
 
   return (
     <div
-      onClick={() => navigate(`/student/hackathon/${hackathon.slug}`)}
+      onClick={() => navigate(`/hackathon/${hackathon.slug}`)}
       className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row gap-5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] transition-shadow cursor-pointer w-full items-stretch"
     >
       {/* 1. Left: Large Logo Box */}
       <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-xl shrink-0 flex items-center justify-center overflow-hidden bg-gray-100 border border-gray-200">
         {hackathon.logoImage ? (
-          <img src={`http://localhost:5000/${hackathon.logoImage}`} alt={hackathon.title} className="w-full h-full object-cover" />
+          <img src={hackathon.logoImage} alt={hackathon.title} className="w-full h-full object-cover" />
         ) : (
           <span className="text-gray-400 text-3xl sm:text-5xl font-bold select-none">
             {hackathon.title[0]}
@@ -182,13 +248,45 @@ export default function Dashboard() {
     return list; // 'relevant'
   }, [sortBy, hackathons]);
 
+  const liveHackathons = useMemo(() => {
+    const now = new Date();
+    return hackathons.filter(h => {
+      if (h.status === 'live') return true;
+      if (h.startDate && h.endDate) {
+        return now >= new Date(h.startDate) && now <= new Date(h.endDate);
+      }
+      return false;
+    });
+  }, [hackathons]);
+
+
   return (
     <div className="min-h-screen bg-white">
       <StudentNavbar />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-16">
-        
-        {/* ── Explore Hackathons ── */}
+
+        {/* ── Live Hackathons Section ── */}
+        {liveHackathons.length > 0 && (
+          <section>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center">
+                <Zap size={15} className="text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-gray-900 leading-tight">
+                  Live <span className="text-emerald-600">Hackathons</span>
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">{liveHackathons.length} hackathon{liveHackathons.length !== 1 ? 's' : ''} happening right now</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {liveHackathons.map(hack => (
+                <LiveHackathonCard key={hack.slug} hackathon={hack} />
+              ))}
+            </div>
+          </section>
+        )}
         <section>
           {/* Top Centered Search Bar */}
           <div className="flex justify-center mb-10">

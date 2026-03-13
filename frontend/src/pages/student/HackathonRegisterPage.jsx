@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getHackathonBySlug, registerTeam } from '../../api/hackathonApi';
+import { getHackathonBySlug } from '../../api/hackathonApi';
 import StudentNavbar from '../../components/StudentNavbar';
 import {
   Users, Plus, Trash2, Loader2, CheckCircle2,
-  ArrowLeft, AlertCircle, Info
+  ArrowLeft, AlertCircle, Info, Upload, FileText,
 } from 'lucide-react';
 
 export default function HackathonRegisterPage() {
@@ -14,19 +14,83 @@ export default function HackathonRegisterPage() {
   const [loading,  setLoading]  = useState(true);
   const [submit,   setSubmit]   = useState(false);
   const [success,  setSuccess]  = useState(false);
+  const [regData,  setRegData]  = useState(null); // saved registration info
   const [error,    setError]    = useState('');
 
   const [form, setForm] = useState({
     teamName: '', leaderName: '', leaderEmail: '', college: '',
     teamMembers: [{ name: '', email: '', college: '' }],
   });
+  const [resumeFile, setResumeFile] = useState(null);
 
+  // Decode JWT to get logged-in user's email
+  const getEmailFromToken = () => {
+    try {
+      const token = localStorage.getItem('hf_token');
+      if (!token) return '';
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.email || payload.leaderEmail || '';
+    } catch { return ''; }
+  };
+
+  // On mount: load hackathon and pre-fill email from JWT
   useEffect(() => {
     getHackathonBySlug(slug)
-      .then(r => setHack(r.data.data))
+      .then(r => {
+        setHack(r.data.data);
+        // Pre-fill leaderEmail from JWT token
+        const email = getEmailFromToken();
+        if (email) setForm(f => ({ ...f, leaderEmail: email }));
+      })
       .catch(() => setError('Hackathon not found'))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  // Once hackathon loaded: ALWAYS verify with backend (localStorage may be stale)
+  useEffect(() => {
+    if (!hack) return;
+    const storageKey = `reg_${hack._id}`;
+    const userEmail  = getEmailFromToken() || localStorage.getItem('hf_user_email');
+
+    if (!userEmail) {
+      // No email yet — fall back to localStorage-only (pre-login view)
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed?.id) { setRegData(parsed); setSuccess(true); }
+        } catch {}
+      }
+      return;
+    }
+
+    // Always check backend — localStorage might have a stale/deleted record
+    fetch(`http://localhost:5000/api/registrations/check/${hack._id}/${encodeURIComponent(userEmail)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.registered && data.data) {
+          const entry = { ...data.data, id: data.data._id };
+          setRegData(entry);
+          setSuccess(true);
+          localStorage.setItem(storageKey, JSON.stringify(entry));
+        } else {
+          // Backend says not registered — clear any stale localStorage entry
+          localStorage.removeItem(storageKey);
+          setSuccess(false);
+          setRegData(null);
+        }
+      })
+      .catch(() => {
+        // Network error — fall back to localStorage if it has a valid entry
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed?.id) { setRegData(parsed); setSuccess(true); }
+          } catch {}
+        }
+      });
+  }, [hack]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -45,10 +109,32 @@ export default function HackathonRegisterPage() {
     e.preventDefault();
     setSubmit(true); setError('');
     try {
-      await registerTeam({ ...form, hackathonId: hack._id });
+      const fd = new FormData();
+      fd.append('hackathonId', hack._id);
+      fd.append('teamName',    form.teamName);
+      fd.append('leaderName',  form.leaderName);
+      fd.append('leaderEmail', form.leaderEmail);
+      fd.append('college',     form.college);
+      fd.append('teamMembers', JSON.stringify(form.teamMembers));
+      if (resumeFile) fd.append('resume', resumeFile);
+
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch('http://localhost:5000/api/registrations/register-with-resume', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Registration failed.');
+
+      // Save to localStorage keyed by hackathon _id so reload restores success screen
+      const saved = { ...(data.data || {}), id: data.data?.id, teamName: form.teamName };
+      localStorage.setItem(`reg_${hack._id}`, JSON.stringify(saved));
+      localStorage.setItem('hf_user_email', form.leaderEmail);
+      setRegData(saved);
       setSuccess(true);
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setSubmit(false);
     }
@@ -72,10 +158,18 @@ export default function HackathonRegisterPage() {
         </div>
         <div>
           <h1 className="text-3xl font-extrabold text-dark mb-2">You're In! 🎉</h1>
-          <p className="text-gray-500 max-w-sm mb-8">
-            Team <strong className="text-dark">{form.teamName}</strong> is now registered for{' '}
-            <strong className="text-dark">{hack?.title}</strong>. Best of luck!
+          <p className="text-gray-500 max-w-sm mb-2">
+            Team <strong className="text-dark">{regData?.teamName || form.teamName}</strong> is registered for{' '}
+            <strong className="text-dark">{hack?.title}</strong>.
           </p>
+          {regData?.aiScore != null && (
+            <p className="text-sm font-semibold mb-6">
+              AI Resume Score: <span className="text-royal font-black text-lg">{regData.aiScore}/100</span>
+            </p>
+          )}
+          {regData?.aiScore == null && (
+            <p className="text-xs text-gray-400 mb-6">Resume score will appear here once processed.</p>
+          )}
           <Link to={`/hackathon/${slug}`} className="btn-primary px-8 py-3 text-base">
             Back to Event Page
           </Link>
@@ -194,6 +288,32 @@ export default function HackathonRegisterPage() {
                         className="input" placeholder="Your college or university name" required />
                     </div>
                   </div>
+                </div>
+
+                {/* Resume Upload */}
+                <div className="form-card">
+                  <h2 className="form-card-title flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-royal" /> Resume Upload
+                  </h2>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Your resume will be automatically scored by AI to help organizers shortlist candidates.
+                  </p>
+                  <label className="flex flex-col items-center justify-center gap-3 w-full h-32 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-royal hover:bg-royal/5 transition-all duration-200 group">
+                    <Upload size={22} className="text-gray-400 group-hover:text-royal transition-colors" />
+                    {resumeFile ? (
+                      <span className="text-sm font-medium text-royal">{resumeFile.name}</span>
+                    ) : (
+                      <span className="text-sm text-gray-400">
+                        Click to upload <span className="text-royal font-semibold">Resume</span>{' '}(PDF / PNG / JPG)
+                      </span>
+                    )}
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="hidden"
+                      onChange={e => setResumeFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
                 </div>
 
                 {/* Team Members */}

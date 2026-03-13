@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Utensils, DoorOpen, QrCode, Clock, CheckCircle2,
@@ -7,7 +7,7 @@ import {
   Megaphone, Wrench, Ticket, MessageSquare, Loader2, AlertTriangle,
 } from 'lucide-react';
 import StudentNavbar from '../../components/StudentNavbar';
-import { Html5Qrcode } from 'html5-qrcode';
+import EventQRScanner from '../../components/EventQRScanner';
 
 const API_BASE = 'http://localhost:5000/api/live-event';
 
@@ -26,8 +26,6 @@ const FALLBACK_EVENT = {
   entryStatus: 'Not Entered',
   lunchStatus: 'Not Claimed',
   dinnerStatus: 'Not Claimed',
-  entryQR: '',
-  mealsQR: '',
 };
 
 /* ═══════════ STATUS HELPERS ═══════════ */
@@ -143,94 +141,68 @@ export default function LiveEvent() {
 
   /* Helper to get auth headers */
   const getHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('hf_token');
     return {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
   };
 
-  /* Fetch live event data on mount */
+  /* Fetch live event data + real hackathon name on mount */
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/me`, { headers: getHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setEvent(data);
+        // Fetch both in parallel — live event (may 404) + latest hackathon for real name
+        const [eventRes, hackRes] = await Promise.allSettled([
+          fetch(`${API_BASE}/me`, { headers: getHeaders() }),
+          fetch('http://localhost:5000/api/hackathons/latest'),
+        ]);
+
+        let merged = { ...FALLBACK_EVENT };
+
+        // Overlay live event data if available
+        if (eventRes.status === 'fulfilled' && eventRes.value.ok) {
+          const data = await eventRes.value.json();
+          merged = { ...merged, ...data };
         }
+
+        // Always override hackathon name/organizer with real MongoDB data
+        if (hackRes.status === 'fulfilled' && hackRes.value.ok) {
+          const hack = await hackRes.value.json();
+          if (hack.title)        merged.hackathonName  = hack.title;
+          if (hack.organizerName) merged.organizerName = hack.organizerName;
+        }
+
+        setEvent(merged);
       } catch {
-        // API unavailable — keep fallback data
+        // Keep fallback data
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  /* Scanner state */
+  /* ─── Universal Scanner state ────────────────────────────────────── */
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerType, setScannerType] = useState(null);
-  const [scanResult, setScanResult] = useState(null);
-  const [scanError, setScanError] = useState(null);
-  const scannerRef = useRef(null);
-  const html5QrRef = useRef(null);
 
-  const openScanner = useCallback((type) => {
-    setScannerType(type);
-    setScanResult(null);
-    setScanError(null);
-    setScannerOpen(true);
+  /**
+   * Called by EventQRScanner once the backend confirms a scan (success or duplicate).
+   * Receives authoritative status values straight from the API response.
+   */
+  const handleScanSuccess = useCallback(({ action, entryStatus, lunchStatus, dinnerStatus }) => {
+    setEvent(prev => ({
+      ...prev,
+      // If the API returned explicit status strings, use them; otherwise fall back to action-based logic
+      entryStatus:  entryStatus  ?? (action === 'entry'  ? 'Entered'   : prev.entryStatus),
+      lunchStatus:  lunchStatus  ?? (action === 'lunch'  ? 'Claimed'   : prev.lunchStatus),
+      dinnerStatus: dinnerStatus ?? (action === 'dinner' ? 'Claimed'   : prev.dinnerStatus),
+    }));
   }, []);
 
-  const closeScanner = useCallback(async () => {
-    try {
-      if (html5QrRef.current) {
-        const state = html5QrRef.current.getState();
-        if (state === 2) await html5QrRef.current.stop();
-        html5QrRef.current.clear();
-        html5QrRef.current = null;
-      }
-    } catch { /* ignore */ }
-    setScannerOpen(false);
-    setScannerType(null);
-  }, []);
-
-  /* Start scanner when modal opens */
-  useEffect(() => {
-    if (!scannerOpen || !scannerRef.current) return;
-
-    const scannerId = 'qr-scanner-region';
-    const html5Qr = new Html5Qrcode(scannerId);
-    html5QrRef.current = html5Qr;
-
-    html5Qr.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      (decodedText) => {
-        setScanResult(decodedText);
-        if (scannerType === 'entry') {
-          setEvent(p => ({ ...p, entryStatus: 'Entered' }));
-        } else if (scannerType === 'meals') {
-          setEvent(p => ({ ...p, lunchStatus: 'Claimed', dinnerStatus: 'Claimed' }));
-        }
-        setTimeout(() => closeScanner(), 1500);
-      },
-      () => {}
-    ).catch((err) => {
-      setScanError('Camera access denied or unavailable. Please allow camera permissions.');
-      console.error('Scanner start error:', err);
-    });
-
-    return () => {
-      html5Qr.stop().catch(() => {});
-      html5Qr.clear();
-    };
-  }, [scannerOpen, scannerType, closeScanner]);
-
-  /* Simulate scans (fallback for no camera) */
-  const simEntry = () => setEvent(p => ({ ...p, entryStatus: p.entryStatus === 'Entered' ? 'Not Entered' : 'Entered' }));
-  const simLunch = () => setEvent(p => ({ ...p, lunchStatus: p.lunchStatus === 'Claimed' ? 'Not Claimed' : 'Claimed' }));
-  const simDinner = () => setEvent(p => ({ ...p, dinnerStatus: p.dinnerStatus === 'Claimed' ? 'Not Claimed' : 'Claimed' }));
+  /* Simulate scans (fallback when no camera) */
+  const simEntry  = () => setEvent(p => ({ ...p, entryStatus:  p.entryStatus  === 'Entered'   ? 'Not Entered' : 'Entered' }));
+  const simLunch  = () => setEvent(p => ({ ...p, lunchStatus:  p.lunchStatus  === 'Claimed'   ? 'Not Claimed' : 'Claimed' }));
+  const simDinner = () => setEvent(p => ({ ...p, dinnerStatus: p.dinnerStatus === 'Claimed'   ? 'Not Claimed' : 'Claimed' }));
 
   /* Help state */
   const [helpModal, setHelpModal] = useState(false);
@@ -265,29 +237,45 @@ export default function LiveEvent() {
         const data = await res.json();
         setHelpRequests(prev => [data, ...prev]);
       } else {
-        // Fallback: add locally
         setHelpRequests(prev => [{
-          id: Date.now(),
-          issue: helpIssue,
-          message: helpMsg,
-          status: 'Pending',
-          time: new Date().toISOString(),
+          id: Date.now(), issue: helpIssue, message: helpMsg,
+          cocomResolved: false, studentResolved: false, time: new Date().toISOString(),
         }, ...prev]);
       }
     } catch {
-      // Offline fallback
       setHelpRequests(prev => [{
-        id: Date.now(),
-        issue: helpIssue,
-        message: helpMsg,
-        status: 'Pending',
-        time: new Date().toISOString(),
+        id: Date.now(), issue: helpIssue, message: helpMsg,
+        cocomResolved: false, studentResolved: false, time: new Date().toISOString(),
       }, ...prev]);
     }
     setHelpSending(false);
     setHelpModal(false);
     setHelpMsg('');
     setHelpFile(null);
+  };
+
+  /* Confirm-resolve: student confirms after CoCom resolves */
+  const [confirming, setConfirming] = useState(null);
+
+  const confirmResolve = async (id) => {
+    setConfirming(id);
+    try {
+      const res = await fetch(`${API_BASE}/help/${id}/student-resolve`, {
+        method: 'PUT',
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.deleted) {
+          setHelpRequests(prev => prev.filter(r => r.id !== id));
+        } else {
+          setHelpRequests(prev => prev.map(r =>
+            r.id === id ? { ...r, studentResolved: true } : r
+          ));
+        }
+      }
+    } catch { /* silent */ }
+    setConfirming(null);
   };
 
   return (
@@ -345,103 +333,93 @@ export default function LiveEvent() {
           </div>
         </motion.div>
 
-        {/* ═══════ EVENT ACCESS QR SECTION ═══════ */}
+        {/* ═══════ UNIVERSAL QR SCANNER SECTION ═══════ */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
           className="mb-8"
         >
           <div className="flex items-center gap-2 mb-1">
             <ScanLine size={18} className="text-royal" />
-            <h2 className="text-lg font-extrabold text-dark">Event Access Scanners</h2>
+            <h2 className="text-lg font-extrabold text-dark">Event Access</h2>
           </div>
           <p className="text-xs text-gray-400 ml-[26px] mb-5">
-            Use these scanners during the hackathon for entry and meals.
+            Use the scanner at Entry, Lunch, and Dinner counters — one scanner handles everything.
           </p>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-            {/* ── Entry QR Card ── */}
+            {/* ── Universal Scan CTA Card ── */}
             <motion.div
               custom={0} variants={cardUp} initial="hidden" animate="visible"
-              whileHover={{ y: -4 }}
-              onClick={() => openScanner('entry')}
-              className="bg-white rounded-2xl border border-gray-100 shadow-md p-6 relative overflow-hidden cursor-pointer"
+              className="lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-md p-6 relative overflow-hidden flex flex-col items-center justify-center gap-5"
             >
+              {/* Decorative blobs */}
               <div className="absolute -top-16 -right-16 w-32 h-32 bg-royal/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-royal flex items-center justify-center">
-                  <DoorOpen size={15} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-dark">Gate Entry Scanner</h3>
-                  <p className="text-[10px] text-gray-400">Scan at venue entrance</p>
-                </div>
-              </div>
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-40 h-40 rounded-2xl bg-gray-900 relative overflow-hidden flex items-center justify-center mb-3">
-                  {/* Scanner corners */}
+              <div className="absolute -bottom-12 -left-12 w-28 h-28 bg-blue-400/5 rounded-full blur-3xl pointer-events-none" />
+
+              {/* Animated scanner icon */}
+              <div className="relative">
+                <div className="w-28 h-28 rounded-2xl bg-gray-900 relative overflow-hidden flex items-center justify-center">
+                  {/* Corner brackets */}
                   <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-royal rounded-tl-md" />
                   <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-royal rounded-tr-md" />
                   <div className="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-royal rounded-bl-md" />
                   <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-royal rounded-br-md" />
-                  {/* Animated scan line */}
+                  {/* Scan line animation */}
                   <motion.div
                     className="absolute left-3 right-3 h-0.5 bg-gradient-to-r from-transparent via-royal to-transparent"
                     animate={{ top: ['15%', '85%', '15%'] }}
                     transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                   />
-                  <ScanLine size={36} className="text-royal/40" />
+                  <QrCode size={32} className="text-royal/40" />
                 </div>
-                <p className="text-xs font-bold text-dark">{event.studentName}</p>
-                <p className="text-[10px] text-gray-400">{event.teamName}</p>
-                <StatusBadge status={event.entryStatus} />
+                {/* Pulse ring */}
+                <motion.div
+                  className="absolute inset-0 rounded-2xl border-2 border-royal/30"
+                  animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0, 0.5] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              </div>
+
+              <div className="text-center">
+                <p className="text-sm font-bold text-dark">Universal QR Scanner</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Entry • Lunch • Dinner — one scan</p>
+              </div>
+
+              {/* THE single scan button */}
+              <motion.button
+                whileHover={{ scale: 1.03, boxShadow: '0 12px 35px rgba(30,58,138,0.3)' }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setScannerOpen(true)}
+                className="w-full flex items-center justify-center gap-2.5 px-5 py-3.5 text-sm font-bold text-white
+                           bg-gradient-to-r from-royal to-blue-500 rounded-xl shadow-lg shadow-royal/25
+                           hover:shadow-xl transition-all cursor-pointer"
+              >
+                <QrCode size={17} />
+                Scan QR Code
+              </motion.button>
+
+              {/* Status chips */}
+              <div className="w-full flex flex-col gap-1.5">
+                {[
+                  { icon: DoorOpen, label: 'Entry', status: event.entryStatus, color: 'text-blue-500' },
+                  { icon: Coffee,   label: 'Lunch',  status: event.lunchStatus,  color: 'text-amber-500' },
+                  { icon: Utensils, label: 'Dinner', status: event.dinnerStatus, color: 'text-violet-500' },
+                ].map(({ icon: I, label, status, color }) => (
+                  <div key={label} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="flex items-center gap-1.5">
+                      <I size={12} className={color} />
+                      <span className="text-[11px] font-semibold text-gray-600">{label}</span>
+                    </div>
+                    <StatusBadge status={status} />
+                  </div>
+                ))}
               </div>
             </motion.div>
 
-            {/* ── Meals QR Card ── */}
+            {/* ── Scan Status Tracking + Progress (spans 2 cols) ── */}
             <motion.div
               custom={1} variants={cardUp} initial="hidden" animate="visible"
-              whileHover={{ y: -4 }}
-              onClick={() => openScanner('meals')}
-              className="bg-white rounded-2xl border border-gray-100 shadow-md p-6 relative overflow-hidden cursor-pointer"
-            >
-              <div className="absolute -top-16 -left-16 w-32 h-32 bg-amber-400/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-                  <Utensils size={15} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-dark">Meals Scanner</h3>
-                  <p className="text-[10px] text-gray-400">Scan at lunch & dinner counters</p>
-                </div>
-              </div>
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-40 h-40 rounded-2xl bg-gray-900 relative overflow-hidden flex items-center justify-center mb-3">
-                  {/* Scanner corners */}
-                  <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-amber-400 rounded-tl-md" />
-                  <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-amber-400 rounded-tr-md" />
-                  <div className="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-amber-400 rounded-bl-md" />
-                  <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-amber-400 rounded-br-md" />
-                  {/* Animated scan line */}
-                  <motion.div
-                    className="absolute left-3 right-3 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent"
-                    animate={{ top: ['15%', '85%', '15%'] }}
-                    transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
-                  />
-                  <ScanLine size={36} className="text-amber-400/40" />
-                </div>
-                <p className="text-xs font-bold text-dark">{event.studentName}</p>
-                <p className="text-[10px] text-gray-400">Lunch & Dinner Access</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <StatusBadge status={event.lunchStatus} />
-                  <StatusBadge status={event.dinnerStatus} />
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Scan Status + Progress — spans 3 cols */}
-            <motion.div
-              custom={1} variants={cardUp} initial="hidden" animate="visible"
-              className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-md p-6 flex flex-col"
+              className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-md p-6 flex flex-col"
             >
               <h3 className="text-sm font-bold text-dark mb-1">Scan Status Tracking</h3>
               <p className="text-[10px] text-gray-400 mb-4">Click any row to simulate a QR scan</p>
@@ -504,10 +482,10 @@ export default function LiveEvent() {
               </div>
               <div className="space-y-2.5">
                 {[
-                  { icon: MapPin, text: event.workspaceLocation },
-                  { icon: Users, text: 'Team seating — bring your team badge' },
+                  { icon: MapPin,  text: event.workspaceLocation },
+                  { icon: Users,   text: 'Team seating — bring your team badge' },
                   { icon: Battery, text: 'Power outlets available at desk' },
-                  { icon: Wifi, text: 'WiFi: HackFlow_Event (password at check-in)' },
+                  { icon: Wifi,    text: 'WiFi: HackFlow_Event (password at check-in)' },
                 ].map(({ icon: I, text }, idx) => (
                   <div key={idx} className="flex items-center gap-2 text-sm text-gray-600">
                     <I size={14} className="text-gray-400 shrink-0" />
@@ -534,14 +512,14 @@ export default function LiveEvent() {
             </div>
             <div className="space-y-0">
               {[
-                { time: '09:00 AM', label: 'Gate Entry', icon: DoorOpen, active: true },
-                { time: '10:00 AM', label: 'Opening Ceremony', icon: Sparkles, active: false },
-                { time: '10:30 AM', label: 'Hacking Begins', icon: CircleDot, active: false },
-                { time: '01:30 PM', label: 'Lunch Break', icon: Coffee, active: false },
-                { time: '05:00 PM', label: 'Submission Deadline', icon: AlertTriangle, active: false },
-                { time: '06:00 PM', label: 'Final Presentations', icon: Megaphone, active: false },
-                { time: '07:30 PM', label: 'Dinner', icon: Utensils, active: false },
-                { time: '08:30 PM', label: 'Winners Announcement', icon: Sparkles, active: false },
+                { time: '09:00 AM', label: 'Gate Entry',           icon: DoorOpen,      active: true },
+                { time: '10:00 AM', label: 'Opening Ceremony',     icon: Sparkles,      active: false },
+                { time: '10:30 AM', label: 'Hacking Begins',       icon: CircleDot,     active: false },
+                { time: '01:30 PM', label: 'Lunch Break',          icon: Coffee,        active: false },
+                { time: '05:00 PM', label: 'Submission Deadline',  icon: AlertTriangle, active: false },
+                { time: '06:00 PM', label: 'Final Presentations',  icon: Megaphone,     active: false },
+                { time: '07:30 PM', label: 'Dinner',               icon: Utensils,      active: false },
+                { time: '08:30 PM', label: 'Winners Announcement', icon: Sparkles,      active: false },
               ].map(({ time, label, icon: I, active }, idx, arr) => (
                 <motion.div key={idx}
                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
@@ -608,41 +586,59 @@ export default function LiveEvent() {
               <MessageSquare size={14} className="text-gray-400" /> Your Help Requests
             </h3>
 
-            {helpRequests.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
-                  <CheckCircle2 size={20} className="text-gray-300" />
-                </div>
-                <p className="text-xs font-semibold text-gray-400">No help requests yet</p>
-                <p className="text-[10px] text-gray-300 mt-0.5">Everything running smoothly!</p>
+          {helpRequests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+                <CheckCircle2 size={20} className="text-gray-300" />
               </div>
-            ) : (
-              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                {helpRequests.map(req => (
+              <p className="text-xs font-semibold text-gray-400">No help requests yet</p>
+              <p className="text-[10px] text-gray-300 mt-0.5">Everything running smoothly!</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              {helpRequests.map(req => {
+                const resolved = req.cocomResolved;
+                return (
                   <motion.div key={req.id}
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                    className="bg-gray-50 rounded-xl p-3.5 border border-gray-100"
+                    className={`rounded-xl p-3.5 border ${
+                      resolved ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-100'
+                    }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold text-dark">{req.issue}</span>
                       <motion.span
-                        key={req.status}
+                        key={resolved ? 'resolved' : 'pending'}
                         initial={{ scale: 0.8 }} animate={{ scale: 1 }}
-                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ring-1
-                          ${req.status === 'Resolved'
-                            ? 'bg-emerald-50 text-emerald-600 ring-emerald-200'
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ring-1 ${
+                          resolved
+                            ? 'bg-emerald-100 text-emerald-700 ring-emerald-200'
                             : 'bg-amber-50 text-amber-600 ring-amber-200'
-                          }`}
+                        }`}
                       >
-                        {req.status}
+                        {resolved ? 'Resolved by CoCom ✓' : 'Pending'}
                       </motion.span>
                     </div>
-                    {req.message && <p className="text-[11px] text-gray-500 mb-1">{req.message}</p>}
-                    <p className="text-[9px] text-gray-400">Submitted at {req.time}</p>
+                    {req.message && <p className="text-[11px] text-gray-500 mb-2">{req.message}</p>}
+                    <p className="text-[9px] text-gray-400 mb-2">Submitted at {new Date(req.time).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                    {resolved && !req.studentResolved && (
+                      <button
+                        onClick={() => confirmResolve(req.id)}
+                        disabled={confirming === req.id}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg
+                          bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600
+                          transition-colors cursor-pointer disabled:opacity-60"
+                      >
+                        {confirming === req.id
+                          ? <><Loader2 size={12} className="animate-spin" /> Confirming...</>
+                          : <><CheckCircle2 size={12} /> Confirm Resolved</>}
+                      </button>
+                    )}
                   </motion.div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
           </motion.div>
         </div>
 
@@ -656,8 +652,8 @@ export default function LiveEvent() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               'Arrive 30 minutes early for a smooth check-in',
-              'Keep your QR code ready on your phone',
-              'Meals are served at the food court — follow signs',
+              'Scan the QR placed at Entry, Lunch, and Dinner counters',
+              'One universal scanner handles all check-ins automatically',
               'Submit your project before the deadline timer ends',
             ].map((tip, i) => (
               <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
@@ -710,10 +706,10 @@ export default function LiveEvent() {
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Issue Type</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { value: 'Workspace Issue', icon: Wrench, color: 'text-blue-500' },
-                      { value: 'Technical Issue', icon: AlertTriangle, color: 'text-amber-500' },
-                      { value: 'Food Coupon Issue', icon: Ticket, color: 'text-emerald-500' },
-                      { value: 'Other', icon: MessageSquare, color: 'text-gray-500' },
+                      { value: 'Workspace Issue', icon: Wrench,        color: 'text-blue-500' },
+                      { value: 'Technical Issue', icon: AlertTriangle,  color: 'text-amber-500' },
+                      { value: 'Food Coupon Issue', icon: Ticket,       color: 'text-emerald-500' },
+                      { value: 'Other',             icon: MessageSquare, color: 'text-gray-500' },
                     ].map(({ value, icon: I, color }) => (
                       <button key={value} onClick={() => setHelpIssue(value)}
                         className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer
@@ -778,84 +774,13 @@ export default function LiveEvent() {
         )}
       </AnimatePresence>
 
-      {/* ═══════ QR SCANNER MODAL ═══════ */}
+      {/* ═══════ UNIVERSAL QR SCANNER MODAL ═══════ */}
       <AnimatePresence>
         {scannerOpen && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4"
-          >
-            {/* Close */}
-            <button onClick={closeScanner}
-              className="absolute top-5 right-5 p-2.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors cursor-pointer z-10">
-              <X size={20} className="text-white" />
-            </button>
-
-            {/* Header */}
-            <div className="text-center mb-6">
-              <h2 className="text-white text-lg font-bold">
-                {scannerType === 'entry' ? 'Gate Entry Scanner' : 'Meals Scanner'}
-              </h2>
-              <p className="text-white/50 text-xs mt-1">
-                Point your camera at the QR code
-              </p>
-            </div>
-
-            {/* Scanner viewport */}
-            <div className="relative w-full max-w-sm">
-              {/* Scanner frame corners */}
-              <div className="absolute -top-1 -left-1 w-8 h-8 border-t-3 border-l-3 border-royal rounded-tl-lg z-10" />
-              <div className="absolute -top-1 -right-1 w-8 h-8 border-t-3 border-r-3 border-royal rounded-tr-lg z-10" />
-              <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-3 border-l-3 border-royal rounded-bl-lg z-10" />
-              <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-3 border-r-3 border-royal rounded-br-lg z-10" />
-
-              {/* Animated scan line */}
-              <motion.div
-                className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-royal to-transparent z-10"
-                animate={{ top: ['5%', '95%', '5%'] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              />
-
-              {/* html5-qrcode renders into this div */}
-              <div
-                ref={scannerRef}
-                id="qr-scanner-region"
-                className="w-full rounded-xl overflow-hidden bg-gray-900"
-                style={{ minHeight: 300 }}
-              />
-            </div>
-
-            {/* Success result */}
-            {scanResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                className="mt-6 flex items-center gap-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-5 py-3"
-              >
-                <CheckCircle2 size={20} className="text-emerald-400" />
-                <div>
-                  <p className="text-emerald-300 text-sm font-bold">Scan Successful!</p>
-                  <p className="text-emerald-400/60 text-[10px] font-mono mt-0.5">{scanResult}</p>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Error */}
-            {scanError && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                className="mt-6 flex flex-col items-center gap-3 max-w-sm"
-              >
-                <div className="flex items-center gap-2 bg-red-500/20 border border-red-500/30 rounded-xl px-5 py-3">
-                  <AlertTriangle size={16} className="text-red-400" />
-                  <p className="text-red-300 text-xs">{scanError}</p>
-                </div>
-                <button onClick={() => { closeScanner(); if (scannerType === 'entry') simEntry(); else { simLunch(); simDinner(); } }}
-                  className="text-white/50 text-xs hover:text-white underline cursor-pointer">
-                  Simulate scan instead
-                </button>
-              </motion.div>
-            )}
-          </motion.div>
+          <EventQRScanner
+            onScanSuccess={handleScanSuccess}
+            onClose={() => setScannerOpen(false)}
+          />
         )}
       </AnimatePresence>
     </div>
