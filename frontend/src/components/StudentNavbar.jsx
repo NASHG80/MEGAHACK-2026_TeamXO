@@ -1,55 +1,75 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, Radio, LogOut } from 'lucide-react';
+import { Menu, X, User, Radio, LogOut, Zap } from 'lucide-react';
 
-const baseLinks = [
-  { label: 'Dashboard', to: '/student/dashboard' },
+const BASE_LINKS = [
+  { label: 'Dashboard',    to: '/student/dashboard' },
   { label: 'Certificates', to: '/student/certificates' },
 ];
 
-// mock user – replace with real auth context / props when ready
-const mockUser = {
-  userId: 'stu_001',
-  name: 'Arjun Mehta',
-  profileImage: null,
-};
+export default function StudentNavbar() {
+  const [mobileOpen, setMobileOpen]     = useState(false);
+  const [isShortlisted, setIsShortlisted] = useState(false);
+  const [user, setUser] = useState({
+    name:  localStorage.getItem('hf_name')  || '',
+    email: localStorage.getItem('hf_email') || '',
+  });
 
-export default function StudentNavbar({ user = mockUser }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [isShortlisted, setIsShortlisted] = useState(true); // default true as fallback
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const token     = localStorage.getItem('hf_token');
 
-  /* Fetch shortlisted status from API */
+  /* ── Fetch real user data ── */
   useEffect(() => {
+    if (!token) return;
     (async () => {
       try {
-        const token = localStorage.getItem('token');
+        const res = await fetch('http://localhost:5000/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // API returns { success, user: { name, email, ... } }
+          const u = data.user || data;
+          setUser({ name: u.name || '', email: u.email || '' });
+        }
+      } catch { /* keep defaults */ }
+    })();
+  }, [token]);
+
+  /* ── Fetch shortlisted status ── */
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
         const res = await fetch('http://localhost:5000/api/live-event/shortlisted', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           const data = await res.json();
           setIsShortlisted(data.isShortlisted);
         }
-      } catch {
-        // API unavailable — keep default (true)
-      }
+      } catch { /* keep false */ }
     })();
-  }, []);
+  }, [token]);
 
   const navLinks = isShortlisted
-    ? [...baseLinks, { label: 'Live Event', to: '/student/live-event', highlight: true }]
-    : baseLinks;
+    ? [...BASE_LINKS, { label: 'Live Event', to: '/student/live-event', highlight: true }]
+    : BASE_LINKS;
 
+  /* ── Initials avatar from real name ── */
   const initials = user.name
-    ? user.name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
-    : 'ST';
+    ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : (user.email ? user.email[0].toUpperCase() : 'ST');
+
+  const avBg = (str = '') =>
+    `hsl(${(str.charCodeAt(0) || 0) * 47 % 360},55%,55%)`;
+
+  const signOut = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('hf_token');
+    navigate('/');
+  };
 
   return (
     <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -58,7 +78,10 @@ export default function StudentNavbar({ user = mockUser }) {
 
           {/* ── Logo ── */}
           <Link to="/" className="flex items-center gap-2 group">
-            <span className="text-2xl font-extrabold text-royal tracking-tight">
+            <div className="w-8 h-8 rounded-xl bg-royal flex items-center justify-center shadow-sm shadow-royal/30 group-hover:scale-105 transition-transform">
+              <Zap size={16} className="text-white fill-white" />
+            </div>
+            <span className="text-xl font-extrabold text-royal tracking-tight">
               Hack<span className="text-dark">Flow</span>
             </span>
           </Link>
@@ -86,29 +109,22 @@ export default function StudentNavbar({ user = mockUser }) {
             })}
           </div>
 
-          {/* ── Profile Icon + Sign Out ── */}
+          {/* ── Profile Avatar + Sign Out ── */}
           <div className="hidden md:flex items-center gap-2">
             <button
               onClick={() => navigate('/student/profile')}
-              className="flex items-center justify-center w-9 h-9 rounded-full bg-royal/10 hover:bg-royal hover:text-white text-royal transition-all duration-200 font-semibold text-sm overflow-hidden cursor-pointer"
+              title={user.name || user.email || 'Profile'}
+              className="flex items-center justify-center w-9 h-9 rounded-full text-white font-bold text-sm overflow-hidden shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+              style={{ background: avBg(user.name || user.email) }}
               aria-label="View profile"
             >
-              {user.profileImage ? (
-                <img
-                  src={user.profileImage}
-                  alt={user.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span>{initials}</span>
-              )}
+              {initials}
             </button>
+            <span className="text-sm font-medium text-gray-700 hidden lg:block max-w-[140px] truncate">
+              {user.name || user.email}
+            </span>
             <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('hf_token');
-                navigate('/');
-              }}
+              onClick={signOut}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
               aria-label="Sign out"
             >
@@ -155,16 +171,16 @@ export default function StudentNavbar({ user = mockUser }) {
               className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 hover:text-royal hover:bg-royal/5 rounded-lg transition-colors"
               onClick={() => setMobileOpen(false)}
             >
-              <User size={16} />
-              {user.name || 'Profile'}
+              <div
+                className="w-7 h-7 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0"
+                style={{ background: avBg(user.name || user.email) }}
+              >
+                {initials}
+              </div>
+              {user.name || user.email || 'Profile'}
             </Link>
             <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('hf_token');
-                setMobileOpen(false);
-                navigate('/');
-              }}
+              onClick={() => { setMobileOpen(false); signOut(); }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
             >
               <LogOut size={16} /> Sign Out

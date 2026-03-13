@@ -5,6 +5,9 @@ const { protect, requireRole } = require('../middleware/auth');
 const { upload } = require('../middleware/uploadMiddleware'); // memoryStorage — no disk writes
 const ctrl = require('../controllers/certificateController');
 
+/* ── Student: my certificates ────────────────────────────────────── */
+router.get('/my', protect, requireRole('student'), ctrl.getMyCertificates);
+
 /* ── Template Routes ─────────────────────────────────────────────── */
 
 // Create a new template (preset or uploaded background)
