@@ -13,6 +13,7 @@ const {
   rescoreRegistration,
   sendShortlistEmails,
   publishResults,
+  saveGithubLink,
 } = require('../controllers/registrationController');
 const upload = require('../config/multer');
 const { protect } = require('../middleware/auth');
@@ -55,6 +56,9 @@ router.post('/send-emails/:hackathonId', sendShortlistEmails);
 
 // POST — organizer publishes results, unlocking LiveEvent for shortlisted students
 router.post('/publish/:hackathonId', publishResults);
+
+// PUT — student submits their GitHub repo link (auth required)
+router.put('/github-link', protect, saveGithubLink);
 
 // DELETE a registration by ID
 router.delete('/:id', deleteRegistration);

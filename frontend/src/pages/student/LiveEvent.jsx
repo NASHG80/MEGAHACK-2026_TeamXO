@@ -184,6 +184,101 @@ function ScanStatusRow({ icon: Icon, label, status, iconBg, onScan }) {
 }
 
 /* ═══════════════════════════════════════
+   GITHUB LINK CARD
+   ═══════════════════════════════════════ */
+function GithubLinkCard({ hackathonId, existingLink }) {
+  const [link, setLink]       = useState(existingLink || '');
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(!!existingLink);
+  const [error, setError]     = useState('');
+
+  const handleSave = async () => {
+    if (!link.trim()) { setError('Please enter your GitHub link.'); return; }
+    if (!/^https?:\/\/.+/i.test(link.trim())) { setError('Enter a valid URL starting with http(s).'); return; }
+    setError('');
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch('http://localhost:5000/api/registrations/github-link', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ hackathonId, githubLink: link.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSaved(true);
+        setLink(data.githubLink);
+      } else {
+        setError(data.message || 'Failed to save. Try again.');
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      className="bg-white rounded-2xl border border-gray-100 shadow-md p-6 mb-8"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-800 to-gray-950 flex items-center justify-center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.374 0 0 5.373 0 12c0 5.303 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-dark">GitHub Repository</h3>
+          <p className="text-[10px] text-gray-400">Submit your project's GitHub link — visible to the organizer</p>
+        </div>
+        {saved && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200">
+            <CheckCircle2 size={10} /> Submitted
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          type="url"
+          value={link}
+          onChange={e => { setLink(e.target.value); setSaved(false); setError(''); }}
+          placeholder="https://github.com/your-username/your-project"
+          className="flex-1 px-4 py-3 text-sm rounded-xl border border-gray-200 bg-gray-50
+                     focus:outline-none focus:ring-2 focus:ring-gray-800/20 focus:border-gray-700
+                     placeholder:text-gray-400 font-mono"
+        />
+        <motion.button
+          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-5 py-3 rounded-xl text-sm font-bold text-white
+                     bg-gray-900 hover:bg-gray-800 shadow-md transition-all cursor-pointer
+                     disabled:opacity-50 shrink-0"
+        >
+          {saving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : <><Send size={13} /> Submit</>}
+        </motion.button>
+      </div>
+
+      {error && <p className="mt-2 text-xs text-red-500 font-medium">{error}</p>}
+
+      {saved && link && (
+        <a href={link} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold text-gray-700 hover:text-gray-900 underline underline-offset-2 transition-colors">
+          <ChevronRight size={11} /> View submitted repo
+        </a>
+      )}
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════
    MAIN LIVE EVENT PAGE
    ═══════════════════════════════════════ */
 export default function LiveEvent() {
@@ -1204,6 +1299,9 @@ export default function LiveEvent() {
           </div>
         </motion.div>
 
+        {/* ── GitHub Repository Link ── */}
+        <GithubLinkCard hackathonId={event.hackathonId} existingLink={event.githubLink} />
+
         {/* ── Quick Tips ── */}
         <motion.div custom={7} variants={cardUp} initial="hidden" animate="visible"
           className="bg-gradient-to-r from-royal/5 to-blue-50 rounded-2xl border border-royal/10 p-6"
@@ -1225,6 +1323,7 @@ export default function LiveEvent() {
             ))}
           </div>
         </motion.div>
+
 
       </main>
       )}

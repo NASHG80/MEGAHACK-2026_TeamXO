@@ -552,4 +552,62 @@ const publishResults = async (req, res) => {
   }
 };
 
-module.exports = { registerTeam, registerWithResume, getRegistrations, getAllRegistrations, getMyRegistrations, checkRegistration, getMyShortlistStatus, shortlistRegistration, deleteRegistration, rescoreRegistration, sendShortlistEmails, publishResults };
+/* ─────────────────────────────────────────────────────────────
+   PUT /api/registrations/github-link
+   Student submits their GitHub repo link.
+   Finds the registration by the student's email (leader OR member)
+   and the provided hackathonId, then saves the link.
+───────────────────────────────────────────────────────────── */
+const saveGithubLink = async (req, res) => {
+  try {
+    const userEmail  = req.user?.email;
+    const { hackathonId, githubLink } = req.body;
+
+    if (!userEmail)   return res.status(401).json({ success: false, message: 'Not authenticated.' });
+    if (!hackathonId) return res.status(400).json({ success: false, message: 'hackathonId is required.' });
+    if (!githubLink)  return res.status(400).json({ success: false, message: 'githubLink is required.' });
+
+    // Simple URL validation
+    const urlPattern = /^https?:\/\/.+/i;
+    if (!urlPattern.test(githubLink.trim())) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid URL starting with http(s).' });
+    }
+
+    // Resolve hackathon ID or slug
+    let hackathon = null;
+    if (hackathonId.match(/^[a-f\d]{24}$/i)) {
+      hackathon = await Hackathon.findById(hackathonId);
+    }
+    if (!hackathon) {
+      hackathon = await Hackathon.findOne({ slug: hackathonId });
+    }
+    if (!hackathon) return res.status(404).json({ success: false, message: 'Hackathon not found.' });
+
+    // Find registration where this user is the leader
+    let reg = await Registration.findOne({
+      hackathon:   hackathon._id,
+      leaderEmail: { $regex: new RegExp(`^${userEmail.trim()}$`, 'i') },
+    });
+
+    // Fallback: search as a team member
+    if (!reg) {
+      reg = await Registration.findOne({
+        hackathon:              hackathon._id,
+        'teamMembers.email':    { $regex: new RegExp(`^${userEmail.trim()}$`, 'i') },
+      });
+    }
+
+    if (!reg) return res.status(404).json({ success: false, message: 'Registration not found for this hackathon.' });
+
+    reg.githubLink = githubLink.trim();
+    await reg.save();
+
+    res.json({ success: true, message: 'GitHub link saved!', githubLink: reg.githubLink });
+  } catch (err) {
+    console.error('[saveGithubLink]', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { registerTeam, registerWithResume, getRegistrations, getAllRegistrations, getMyRegistrations, checkRegistration, getMyShortlistStatus, shortlistRegistration, deleteRegistration, rescoreRegistration, sendShortlistEmails, publishResults, saveGithubLink };
+

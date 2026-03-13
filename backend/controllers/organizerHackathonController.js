@@ -100,8 +100,10 @@ const getHackathonManageData = async (req, res) => {
         submitted:   !!r.resumeUrl,
         score:       r.aiScore ?? null,
         shortlisted: r.shortlisted || false,
+        githubLink:  r.githubLink  || '',
       };
     });
+
 
     res.json({
       success: true,

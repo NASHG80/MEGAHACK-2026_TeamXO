@@ -29,8 +29,10 @@ const registrationSchema = new mongoose.Schema(
     aiScore: { type: Number, default: null },
     shortlisted: { type: Boolean, default: false },
     // ── Extra fields ────────────────────────────────────────────
-    domain: { type: String, default: '' },
-    psId:   { type: String, default: '' },
+    domain:     { type: String, default: '' },
+    psId:       { type: String, default: '' },
+    githubLink: { type: String, default: '' },
+
   },
   { timestamps: true }
 );
