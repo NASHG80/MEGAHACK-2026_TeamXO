@@ -515,7 +515,7 @@ export default function AdminDashboard() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/60">
-                        {['Organizer','Email','Club','College','Org. Verified','Joined'].map(h => (
+                        {['Organizer','Email','Club','College','Loyalty Pts','Total Hosted','Org. Verified','Joined'].map(h => (
                           <th key={h} className="px-5 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -536,6 +536,12 @@ export default function AdminDashboard() {
                             </td>
                             <td className="px-5 py-4 text-sm text-gray-700">{u.verification?.clubName || <span className="text-gray-300">—</span>}</td>
                             <td className="px-5 py-4 text-sm text-gray-500">{u.verification?.college || <span className="text-gray-300">—</span>}</td>
+                            <td className="px-5 py-4">
+                              <span className="inline-flex items-center px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold">
+                                {u.loyaltyPoints || 0} pts
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-sm font-semibold text-gray-700">{u.totalHackathonsHosted || 0}</td>
                             <td className="px-5 py-4"><VerifiedBadge isVerified={u.orgVerified} /></td>
                             <td className="px-5 py-4">
                               <div className="flex items-center gap-1.5 text-xs text-gray-400"><CalendarDays size={11} />{fmt(u.createdAt)}</div>

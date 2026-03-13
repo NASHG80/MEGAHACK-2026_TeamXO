@@ -23,6 +23,16 @@ const registerTeam = async (req, res) => {
       teamMembers: teamMembers || [],
       domain: domain || '', psId: psId || '',
     });
+
+    const count = await Registration.countDocuments({ hackathon: hackathonId });
+    if (count === 100) {
+      const hack = await Hackathon.findById(hackathonId).select('createdBy');
+      if (hack && hack.createdBy) {
+        const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+        addLoyaltyPoints(hack.createdBy, 50, 'Reached 100 Participants/Teams');
+      }
+    }
+
     res.status(201).json({ success: true, message: 'Registration successful!', data: registration });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -74,6 +84,15 @@ const registerWithResume = async (req, res) => {
       psId:          psId   || '',
     });
     console.log('[registerWithResume] ✅ Saved instantly! ID:', registration._id);
+
+    const count = await Registration.countDocuments({ hackathon: hackathonId });
+    if (count === 100) {
+      const hack = await Hackathon.findById(hackathonId).select('createdBy');
+      if (hack && hack.createdBy) {
+        const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+        addLoyaltyPoints(hack.createdBy, 50, 'Reached 100 Participants/Teams');
+      }
+    }
 
     // ── STEP 2: Respond to student right away ───────────────────
     res.status(201).json({

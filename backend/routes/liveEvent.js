@@ -13,6 +13,9 @@ router.put ('/help/:id/student-resolve', protect, ctrl.studentResolveHelpRequest
 // ── Student self-scan (participant scans venue QR themselves) ─────
 router.post('/self-scan', protect, requireRole('student'), ctrl.selfScan);
 
+// ── Student feedback (post-hackathon) ─────────────────────────────
+router.post('/feedback',  protect, requireRole('student'), ctrl.submitFeedback);
+
 // ── Organizer endpoints ───────────────────────────────────────────
 router.post('/scan', protect, requireRole('organizer'), ctrl.scanQR);
 

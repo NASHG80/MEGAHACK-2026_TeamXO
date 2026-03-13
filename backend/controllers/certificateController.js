@@ -256,6 +256,10 @@ exports.generateCertificates = async (req, res) => {
     // Respond immediately
     res.status(202).json({ message: 'Generation started', total: docs.length });
 
+    // ── Loyalty points on certificate generation ──
+    const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+    addLoyaltyPoints(hackathon.createdBy, 20, 'Certificates Generated');
+
     // ── Background processing ────────────────────────────────────────
     (async () => {
       for (const doc of docs) {
@@ -504,6 +508,10 @@ exports.generatePersonalized = async (req, res) => {
     const docs = await Certificate.insertMany(insertDocs, { ordered: false });
 
     res.status(202).json({ message: 'Generation started', total: docs.length });
+
+    // ── Loyalty points on certificate generation ──
+    const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+    addLoyaltyPoints(hackathon.createdBy, 20, 'Certificates Generated');
 
     const nameX = template.nameX ?? 0.5, nameY = template.nameY ?? 0.5;
     const fontSize = template.fontSize ?? 52, nameColor = template.nameColor ?? '#1E3A8A';

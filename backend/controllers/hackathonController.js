@@ -176,10 +176,20 @@ const updateHackathon = async (req, res) => {
       }
     }
 
+    const oldHackathon = await Hackathon.findOne({ slug: req.params.slug });
+    if (!oldHackathon) return res.status(404).json({ success: false, message: 'Not found' });
+
     const hackathon = await Hackathon.findOneAndUpdate(
       { slug: req.params.slug }, updates, { new: true, runValidators: true }
     );
-    if (!hackathon) return res.status(404).json({ success: false, message: 'Not found' });
+    
+    // ── Loyalty points on completion ──
+    if (updates.status === 'completed' && oldHackathon.status !== 'completed') {
+      const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+      await addLoyaltyPoints(hackathon.createdBy, 100, 'Hackathon Completed Successfully');
+      await User.findByIdAndUpdate(hackathon.createdBy, { $inc: { totalHackathonsHosted: 1 } });
+    }
+
     res.json({ success: true, data: hackathon });
   } catch (err) {
     console.error('updateHackathon:', err);

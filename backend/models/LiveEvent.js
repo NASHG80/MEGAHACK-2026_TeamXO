@@ -60,6 +60,16 @@ const liveEventSchema = new mongoose.Schema(
       default: () => crypto.randomUUID(),
       unique: true,
     },
+
+    // Post-hackathon feedback
+    feedbackSubmitted: {
+      type: Boolean,
+      default: false,
+    },
+    feedbackRating: {
+      type: Number,
+      default: null,
+    },
   },
   { timestamps: true }
 );

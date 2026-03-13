@@ -151,6 +151,8 @@ const reviewVerification = async (req, res) => {
     // If approved — set orgVerified on User (not isVerified which is for email OTP)
     if (action === 'approve') {
       await User.findByIdAndUpdate(verification.organizerId, { orgVerified: true });
+      const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+      await addLoyaltyPoints(verification.organizerId, 50, 'Organizer Profile Approved');
     }
     // If rejected — ensure orgVerified is false
     if (action === 'reject') {

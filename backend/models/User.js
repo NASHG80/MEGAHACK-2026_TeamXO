@@ -71,6 +71,23 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // ── Loyalty Points System (for Organizers) ────────────────────
+    loyaltyPoints: {
+      type: Number,
+      default: 0,
+    },
+    totalHackathonsHosted: {
+      type: Number,
+      default: 0,
+    },
+    loyaltyHistory: [
+      {
+        action: String,
+        points: Number,
+        date: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

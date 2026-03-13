@@ -12,7 +12,7 @@ const crypto       = require('crypto');
 exports.getMyLiveEvent = async (req, res) => {
   try {
     const event = await LiveEvent.findOne({ student: req.user.id })
-      .populate('hackathon', 'title organizerName venue date time')
+      .populate('hackathon', 'title organizerName venue date time status')
       .populate('student', 'name email');
 
     if (!event) {
@@ -35,6 +35,8 @@ exports.getMyLiveEvent = async (req, res) => {
       dinnerStatus:      event.dinnerStatus,
       entryQR:           event.entryQR,
       mealsQR:           event.mealsQR,
+      hackathonStatus:   event.hackathon.status,
+      feedbackSubmitted: event.feedbackSubmitted,
     });
   } catch (err) {
     console.error('getMyLiveEvent error:', err);
@@ -486,6 +488,45 @@ exports.getMyTreasureHunt = async (req, res) => {
     });
   } catch (err) {
     console.error('getMyTreasureHunt error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/* ───────────────────────────────────────────
+   POST /api/live-event/feedback
+   Student submits post-hackathon feedback
+   ─────────────────────────────────────────── */
+exports.submitFeedback = async (req, res) => {
+  try {
+    const { hackathonId, rating } = req.body;
+    if (!hackathonId || !rating) return res.status(400).json({ message: 'Missing fields' });
+    
+    const points = parseInt(rating, 10);
+    if (isNaN(points) || points < 1 || points > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+
+    const event = await LiveEvent.findOne({ student: req.user.id, hackathon: hackathonId });
+    if (!event) return res.status(404).json({ message: 'Live event record not found' });
+    
+    // Prevent duplicate feedback points
+    if (event.feedbackSubmitted) {
+       return res.status(400).json({ message: 'Feedback already submitted' });
+    }
+
+    event.feedbackSubmitted = true;
+    event.feedbackRating = points;
+    await event.save();
+
+    const hackathon = await Hackathon.findById(hackathonId).select('createdBy');
+    if (hackathon && hackathon.createdBy) {
+      const { addLoyaltyPoints } = require('../utils/loyaltyProcessor');
+      await addLoyaltyPoints(hackathon.createdBy, points, `Student Feedback Rating (${points} Stars)`);
+    }
+
+    return res.json({ success: true, message: 'Thank you for your feedback!' });
+  } catch (err) {
+    console.error('submitFeedback error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };

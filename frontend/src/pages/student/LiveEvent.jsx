@@ -143,6 +143,10 @@ export default function LiveEvent() {
   // 'checking' | 'not_published' | 'not_shortlisted' | 'granted'
   const [accessState, setAccessState] = useState('checking');
 
+  /* Feedback State */
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
   /* Helper to get auth headers */
   const getHeaders = () => {
     const token = localStorage.getItem('hf_token');
@@ -150,6 +154,25 @@ export default function LiveEvent() {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+  };
+
+  const submitFeedback = async () => {
+    if (feedbackRating < 1 || feedbackRating > 5) return;
+    setFeedbackSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/feedback`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          hackathonId: event.hackathonId,
+          rating: feedbackRating,
+        }),
+      });
+      if (res.ok) {
+        setEvent(prev => ({ ...prev, feedbackSubmitted: true }));
+      }
+    } catch { /* ignore */ }
+    setFeedbackSubmitting(false);
   };
 
   /* Fetch live event data + real hackathon name on mount */
@@ -565,6 +588,51 @@ export default function LiveEvent() {
             <span className="flex items-center gap-1.5"><Wifi size={12} className="text-gray-400" /> {event.time}</span>
           </div>
         </motion.div>
+
+        {/* ── Post-Hackathon Feedback ── */}
+        {event.hackathonStatus === 'completed' && !event.feedbackSubmitted && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="mb-8 p-6 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 shadow-sm flex flex-col md:flex-row gap-6 items-center justify-between"
+          >
+            <div>
+              <h3 className="text-lg font-extrabold text-amber-900 flex items-center gap-2 mb-1">
+                <Star size={20} className="text-amber-500 fill-amber-500" />
+                Rate Your Experience
+              </h3>
+              <p className="text-xs text-amber-700 font-medium">
+                The hackathon has ended! How was your experience with the organizers? Your feedback gives them loyalty points!
+              </p>
+            </div>
+            <div className="flex flex-col items-center gap-3 shrink-0 w-full md:w-auto">
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setFeedbackRating(star)}
+                    className="focus:outline-none transition-transform hover:scale-110 cursor-pointer p-1"
+                  >
+                    <Star size={28} className={feedbackRating >= star ? 'text-amber-500 fill-amber-500' : 'text-amber-200 fill-amber-50'} />
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={submitFeedback}
+                disabled={feedbackRating === 0 || feedbackSubmitting}
+                className="w-full py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50 transition-all hover:shadow-lg cursor-pointer"
+              >
+                {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+        {event.hackathonStatus === 'completed' && event.feedbackSubmitted && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="mb-8 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-3 justify-center"
+          >
+            <CheckCircle2 size={18} className="text-emerald-500" />
+            <p className="text-sm font-bold text-emerald-800">Thank you for submitting your feedback!</p>
+          </motion.div>
+        )}
 
         {/* ═══════ UNIVERSAL QR SCANNER SECTION ═══════ */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
