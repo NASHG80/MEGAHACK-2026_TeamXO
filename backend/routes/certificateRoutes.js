@@ -38,8 +38,8 @@ router.delete(
   ctrl.deleteTemplate
 );
 
-/* ── Recipient Routes (open — read-only organizer data) ─────────── */
-router.get('/recipients/:hackathonId', ctrl.getRecipients);
+/* ── Recipient Routes ─────────────────────────────────────────────── */
+router.get('/recipients/:hackathonId', protect, requireRole('organizer', 'admin'), ctrl.getRecipients);
 
 /* ── Generation Routes ───────────────────────────────────────────── */
 router.post(

@@ -135,8 +135,8 @@ exports.deleteTemplate = async (req, res) => {
 
 /**
  * GET /api/certificates/recipients/:hackathonId
- * Returns all students signed up in the system (role = 'student').
- * These are the real user accounts, not hackathon registration records.
+ * Returns only students who are SHORTLISTED for this organizer's hackathon.
+ * Admins can see all shortlisted students for any hackathon.
  */
 exports.getRecipients = async (req, res) => {
   try {
@@ -146,17 +146,23 @@ exports.getRecipients = async (req, res) => {
     const hackathon = await Hackathon.findById(hackathonId).lean();
     if (!hackathon) return res.status(404).json({ message: 'Hackathon not found' });
 
-    // Always fetch real student accounts — people who signed up with role: 'student'
-    // isVerified: true means they completed OTP verification
-    const students = await User.find({ role: 'student', isVerified: true })
-      .select('name email createdAt')
-      .sort({ createdAt: -1 })
-      .lean();
+    // Authorisation: only the organizer who created this hackathon (or admin) can see recipients
+    if (req.user && req.user.role !== 'admin') {
+      if (hackathon.createdBy?.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'You do not have permission to view recipients for this hackathon.' });
+      }
+    }
 
-    const recipients = students.map(u => ({
-      id:    u._id.toString(),
-      name:  u.name && u.name.trim() ? u.name.trim() : u.email.split('@')[0],
-      email: u.email,
+    // Fetch registrations that are shortlisted for this hackathon
+    const shortlistedRegs = await Registration.find({
+      hackathon: hackathonId,
+      shortlisted: true,
+    }).lean();
+
+    const recipients = shortlistedRegs.map(r => ({
+      id:    r._id.toString(),
+      name:  r.leaderName && r.leaderName.trim() ? r.leaderName.trim() : r.leaderEmail.split('@')[0],
+      email: r.leaderEmail,
       type:  'participant',
     }));
 
@@ -169,6 +175,7 @@ exports.getRecipients = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch recipients' });
   }
 };
+
 
 /* ═══════════════════════════════════════════════════════════════════
    GENERATION & EMAIL
@@ -393,18 +400,18 @@ exports.generatePersonalized = async (req, res) => {
 
     let recipients = providedRecipients || [];
     if (sendToAll || recipients.length === 0) {
-      // Always pull from the real student user accounts —
-      // same source as getRecipients so the UI and send list are always in sync.
-      const students = await User.find({ role: 'student', isVerified: true })
-        .select('name email')
-        .lean();
-      recipients = students.map(u => ({
-        name:  u.name && u.name.trim() ? u.name.trim() : u.email.split('@')[0],
-        email: u.email,
+      // Pull only shortlisted participants for THIS hackathon
+      const shortlistedRegs = await Registration.find({
+        hackathon: hackathonId,
+        shortlisted: true,
+      }).lean();
+      recipients = shortlistedRegs.map(r => ({
+        name:  r.leaderName && r.leaderName.trim() ? r.leaderName.trim() : r.leaderEmail.split('@')[0],
+        email: r.leaderEmail,
         type:  'participant',
       }));
     }
-    if (recipients.length === 0) return res.status(400).json({ message: 'No recipients found. No students are registered or signed up.' });
+    if (recipients.length === 0) return res.status(400).json({ message: 'No shortlisted recipients found for this hackathon.' });
 
     // ── BUG FIX: insertMany bypasses Mongoose pre-save hooks, so
     //    certificateNumber is never generated and the unique constraint

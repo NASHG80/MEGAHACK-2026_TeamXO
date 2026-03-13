@@ -43,6 +43,20 @@ const createHackathon = async (req, res) => {
       });
     }
 
+    // ── Block if organizer already has an active hackathon ──────
+    const activeHackathon = await Hackathon.findOne({
+      createdBy: req.user.id,
+      status: { $in: ['upcoming', 'live'] },
+    }).select('title');
+
+    if (activeHackathon) {
+      return res.status(400).json({
+        success: false,
+        message: `You already have an active hackathon: "${activeHackathon.title}". Please mark it as completed before creating a new one.`,
+      });
+    }
+
+
     const body = req.body;
 
     let slug = slugify(body.title, { lower: true, strict: true });
