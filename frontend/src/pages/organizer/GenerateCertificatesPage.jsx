@@ -269,7 +269,7 @@ export default function GenerateCertificatesPage() {
       <OrganizerSidebar open={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
 
       <div className={`transition-all duration-300 ${sidebarOpen ? 'lg:pl-60' : 'lg:pl-16'}`}>
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-16 lg:pt-8">
 
           {/* ── Back + Header ── */}
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">

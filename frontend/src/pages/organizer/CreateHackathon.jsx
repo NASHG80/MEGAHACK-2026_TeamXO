@@ -512,7 +512,7 @@ export default function CreateHackathon() {
       <OrganizerSidebar />
 
       <div className="transition-all duration-300 lg:pl-60">
-        <main className="max-w-4xl mx-auto px-4 sm:px-8 py-8">
+        <main className="max-w-4xl mx-auto px-4 sm:px-8 py-8 pt-16 lg:pt-8">
 
           {/* Header */}
           <div className="flex items-center gap-3 mb-7">

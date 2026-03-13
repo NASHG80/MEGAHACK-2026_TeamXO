@@ -114,20 +114,20 @@ export default function OrganizerDashboard() {
       <div className="transition-all duration-300 lg:pl-60">
 
         {/* ── Top Navbar ── */}
-        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-6">
-          <span className="font-semibold text-dark text-sm">Organizer Dashboard</span>
-          <div className="flex items-center gap-2">
+        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 pl-14 lg:pl-6">
+          <span className="font-semibold text-dark text-sm hidden sm:block">Organizer Dashboard</span>
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <Link
               to="/organizer/profile"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-royal border border-royal/20 rounded-lg hover:bg-royal/5 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-royal border border-royal/20 rounded-lg hover:bg-royal/5 transition-colors"
             >
-              <ShieldCheck size={12} /> My Profile
+              <ShieldCheck size={12} /><span className="hidden sm:inline">My Profile</span>
             </Link>
             <Link
               to="/organizer/create"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-royal rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-royal/20"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-white bg-royal rounded-lg hover:bg-blue-700 transition-colors shadow-sm shadow-royal/20"
             >
-              <PlusCircle size={12} /> Create Hackathon
+              <PlusCircle size={12} /><span className="hidden sm:inline">Create Hackathon</span><span className="sm:hidden">New</span>
             </Link>
             <button
               onClick={() => {
@@ -135,9 +135,9 @@ export default function OrganizerDashboard() {
                 localStorage.removeItem('hf_token');
                 navigate('/');
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-red-500 border border-red-100 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
             >
-              <LogOut size={12} /> Sign Out
+              <LogOut size={12} /><span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </div>
@@ -147,40 +147,60 @@ export default function OrganizerDashboard() {
           {/* ── Profile Header Card ── */}
           <div className="rounded-2xl mb-6 overflow-hidden border border-gray-100 shadow-[0_2px_16px_rgba(30,100,255,0.07)]">
             <div className="h-1.5 bg-gradient-to-r from-royal via-blue-500 to-violet-500" />
-            <div className="bg-white px-6 py-5 flex items-center gap-4 flex-wrap">
-              <div className="relative shrink-0">
-                <div className="w-14 h-14 rounded-2xl bg-royal/10 text-royal flex items-center justify-center font-bold text-xl ring-4 ring-royal/10 uppercase">
+            <div className="bg-white px-4 sm:px-6 py-5">
+
+              {/* Avatar + name row */}
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-royal/10 text-royal flex items-center justify-center font-bold text-lg sm:text-xl ring-4 ring-royal/10 uppercase shrink-0">
                   {user?.name?.charAt(0) || 'O'}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-lg sm:text-xl font-extrabold text-dark truncate">{user?.name || 'Organizer'}</h1>
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">{user?.email || 'organizer@hackflow.in'}</p>
+                </div>
+                {/* Stats — sm+ only, shown inline */}
+                <div className="hidden sm:flex items-center gap-5 border-l border-gray-100 pl-5 shrink-0">
+                  {[
+                    [stats.totalHackathons,  'Events'],
+                    [stats.totalParticipants, 'Participants'],
+                    [stats.totalSubmissions,  'Submissions'],
+                  ].map(([v, l]) => (
+                    <div key={l} className="text-center">
+                      <p className="text-xl font-extrabold text-dark">{v}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{l}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <h1 className="text-xl font-extrabold text-dark">{user?.name || 'Organizer'}</h1>
-                <p className="text-sm text-gray-500 mb-1">{user?.email || 'organizer@hackflow.in'}</p>
-                {user?.loyaltyPoints !== undefined && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-bold shadow-sm">
-                      <Award size={14} className="text-amber-500" />
-                      {user.loyaltyPoints} Loyalty Points
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold shadow-sm">
-                      <Trophy size={14} className="text-emerald-500" />
-                      {user.totalHackathonsHosted || 0} Hosted
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-6 sm:border-l sm:border-gray-100 sm:pl-6">
+
+              {/* Badges */}
+              {user?.loyaltyPoints !== undefined && (
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-bold">
+                    <Award size={12} className="text-amber-500" />
+                    {user.loyaltyPoints} pts
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold">
+                    <Trophy size={12} className="text-emerald-500" />
+                    {user.totalHackathonsHosted || 0} Hosted
+                  </span>
+                </div>
+              )}
+
+              {/* Stats — mobile only, full-width 3-col grid */}
+              <div className="sm:hidden mt-4 pt-3.5 border-t border-gray-100 grid grid-cols-3 divide-x divide-gray-100">
                 {[
-                  [stats.totalHackathons,   'Events'],
-                  [stats.totalParticipants,  'Participants'],
-                  [stats.totalSubmissions,   'Submissions'],
+                  [stats.totalHackathons,  'Events'],
+                  [stats.totalParticipants, 'Participants'],
+                  [stats.totalSubmissions,  'Submissions'],
                 ].map(([v, l]) => (
-                  <div key={l} className="text-center">
+                  <div key={l} className="text-center px-2 py-1">
                     <p className="text-xl font-extrabold text-dark">{v}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{l}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{l}</p>
                   </div>
                 ))}
               </div>
+
             </div>
           </div>
 

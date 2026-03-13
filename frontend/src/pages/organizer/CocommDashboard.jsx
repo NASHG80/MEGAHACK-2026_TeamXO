@@ -383,7 +383,7 @@ export default function CocomManagementDashboard() {
       <div className="transition-all duration-300 lg:pl-60">
 
         {/* ── Top Navbar ── */}
-        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-6">
+        <div className="sticky top-0 z-20 h-[60px] bg-white/90 backdrop-blur border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 pl-14 lg:pl-6">
           <span className="font-semibold text-[#0A1628] text-sm">CoCom Dashboard</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowModal(true)}
