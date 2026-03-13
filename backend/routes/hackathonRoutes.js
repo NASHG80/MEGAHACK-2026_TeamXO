@@ -12,7 +12,9 @@ router.get('/',            getAllHackathons);
 router.get('/latest',      async (req, res) => {
   try {
     const Hackathon = require('../models/Hackathon');
-    const h = await Hackathon.findOne().sort({ createdAt: -1 }).select('_id title organizerName slug');
+    // Include resultsPublished so LiveEvent.jsx can check access gate
+    const h = await Hackathon.findOne().sort({ createdAt: -1 })
+      .select('_id title organizerName slug resultsPublished');
     if (!h) return res.status(404).json({ message: 'No hackathons found' });
     return res.json(h);
   } catch (err) {

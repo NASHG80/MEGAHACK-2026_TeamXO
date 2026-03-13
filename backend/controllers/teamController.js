@@ -1,5 +1,36 @@
 const { Team, generateTeamCode } = require('../models/Team');
-const User = require('../models/User');
+const User         = require('../models/User');
+const Registration = require('../models/Registration');
+
+/* ── Helper: sync all Team.members → Registration.teamMembers ────
+   collegeMap: { [userId]: college } for members whose college is known
+──────────────────────────────────────────────────────────────── */
+async function syncMembersToRegistration(team, collegeMap = {}) {
+  try {
+    const reg = await Registration.findOne({
+      hackathon:   team.hackathonId,
+      leaderEmail: team.leaderEmail,
+    });
+    if (!reg) return;
+
+    const populated = await Team.findById(team._id).populate('members', 'name email');
+    if (!populated) return;
+
+    const leaderEmail = (team.leaderEmail || '').toLowerCase();
+    const newMembers = (populated.members || [])
+      .filter(m => (m.email || '').toLowerCase() !== leaderEmail)
+      .map(m => ({
+        name:    m.name  || '',
+        email:   m.email || '',
+        college: collegeMap[m._id.toString()] || '',
+      }));
+
+    reg.teamMembers = newMembers;
+    await reg.save();
+  } catch (err) {
+    console.error('[syncMembersToRegistration]', err.message);
+  }
+}
 
 /* ─────────────────────────────────────────────────────────────
    POST /api/teams/create
@@ -27,7 +58,7 @@ const createTeam = async (req, res) => {
     const teamCode = await generateTeamCode();
 
     // Fetch leader's email to store directly on the team
-    const leaderUser = await User.findById(userId).select('email');
+    const leaderUser = await User.findById(userId).select('name email');
 
     const team = await Team.create({
       teamName,
@@ -42,10 +73,14 @@ const createTeam = async (req, res) => {
 
     res.status(201).json({
       success:  true,
+      _id:      team._id,
       teamName: team.teamName,
       teamCode: team.teamCode,
       members:  populated.members,
     });
+
+    // Sync members in background (registration may not exist yet — that's OK)
+    syncMembersToRegistration(team).catch(() => {});
   } catch (error) {
     console.error('[createTeam]', error.message);
     res.status(500).json({ success: false, message: error.message });
@@ -55,10 +90,11 @@ const createTeam = async (req, res) => {
 /* ─────────────────────────────────────────────────────────────
    POST /api/teams/join
    Lets a user join an existing team using its teamCode.
+   Also syncs the new member into the Registration document.
 ───────────────────────────────────────────────────────────── */
 const joinTeam = async (req, res) => {
   try {
-    const { teamCode } = req.body;
+    const { teamCode, college } = req.body;  // college optional — member's institution
     const userId = req.user.id;
 
     if (!teamCode) {
@@ -99,6 +135,10 @@ const joinTeam = async (req, res) => {
       teamCode: team.teamCode,
       members:  populated.members,
     });
+
+    // Build collegeMap for the joining member and sync into Registration
+    const collegeMap = { [userId]: college || '' };
+    syncMembersToRegistration(team, collegeMap).catch(() => {});
   } catch (error) {
     console.error('[joinTeam]', error.message);
     res.status(500).json({ success: false, message: error.message });

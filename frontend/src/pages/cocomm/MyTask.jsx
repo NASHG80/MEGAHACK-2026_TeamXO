@@ -3,6 +3,7 @@ import {
   CheckCircle2, Clock, ClipboardList, MapPin, Calendar,
   AlertTriangle, Flag, Loader2, CheckCheck, PhoneCall,
   AlertCircle, Building2, ArrowRight, Zap, RefreshCw,
+  Trophy, Timer, Gift, Star, PackageCheck,
 } from 'lucide-react';
 import api from '../../lib/api';
 
@@ -169,6 +170,9 @@ export default function MyTasksPage() {
   const [confirmTask, setConfirmTask]   = useState(null);
   const [resolving, setResolving]       = useState(null);
   const [refreshing, setRefreshing]     = useState(false);
+  const [chillTasks, setChillTasks]     = useState([]);
+  const [chillRefreshing, setChillRefreshing] = useState(false);
+  const [verifying, setVerifying]       = useState(null);
   const memberIdRef = useRef(null);
 
   const showToast = (text, type = 'success') => {
@@ -187,6 +191,13 @@ export default function MyTasksPage() {
     }
   }, []);
 
+  const loadChillTasks = useCallback(async () => {
+    try {
+      const data = await api.get('/organizer/cocom/gamification/pending');
+      setChillTasks(data.tasks || []);
+    } catch { /* silent */ }
+  }, []);
+
   /* ── Check join status on mount ── */
   useEffect(() => {
     (async () => {
@@ -201,6 +212,7 @@ export default function MyTasksPage() {
           setMemberId(mid);
           setJoined(true);
           await loadDashboard(mid);
+          await loadChillTasks();
         }
       } catch {
         setJoined(false);
@@ -210,7 +222,7 @@ export default function MyTasksPage() {
     })();
   }, [loadDashboard]);
 
-  /* ── Auto-refresh help requests every 15 s ── */
+  /* ── Auto-refresh help requests + chill tasks every 15 s ── */
   useEffect(() => {
     const interval = setInterval(async () => {
       const mid = memberIdRef.current;
@@ -219,9 +231,10 @@ export default function MyTasksPage() {
         const dash = await api.get(`/organizer/cocom/dashboard/${mid}`);
         setHelpRequests(dash.helpRequests || []);
       } catch { /* silent */ }
+      await loadChillTasks();
     }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadChillTasks]);
 
   /* ── Manual refresh ── */
   const handleRefreshHelp = useCallback(async () => {
@@ -243,6 +256,7 @@ export default function MyTasksPage() {
     setJoined(true);
     setLoading(true);
     await loadDashboard(mid);
+    await loadChillTasks();
     setLoading(false);
   };
 
@@ -285,12 +299,32 @@ export default function MyTasksPage() {
     }
   }, []);
 
+  const handleVerifyHunt = useCallback(async (huntId) => {
+    setVerifying(huntId);
+    try {
+      const data = await api.put(`/organizer/cocom/gamification/${huntId}/verify`);
+      setChillTasks(prev => prev.filter(t => t._id !== huntId));
+      showToast(`✅ Verified! Student gets: ${data.goodiesReward}`);
+    } catch {
+      showToast('Failed to verify task.', 'error');
+    } finally {
+      setVerifying(null);
+    }
+  }, []);
+
+  const handleRefreshChill = useCallback(async () => {
+    setChillRefreshing(true);
+    await loadChillTasks();
+    setChillRefreshing(false);
+  }, [loadChillTasks]);
+
   /* ── Derived counts ── */
   const filteredTasks   = taskFilter === 'all' ? tasks : tasks.filter(t => t.status === taskFilter);
   const pendingTasks    = tasks.filter(t => t.status === 'pending').length;
   const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
   const completedTasks  = tasks.filter(t => t.status === 'completed').length;
-  const pendingHelp = helpRequests.filter(h => !h.cocomResolved).length;
+  const pendingHelp  = helpRequests.filter(h => !h.cocomResolved).length;
+  const pendingChill = chillTasks.length;
 
   /* ── Global loader ── */
   if (loading || joined === null) {
@@ -361,6 +395,7 @@ export default function MyTasksPage() {
           <StatCard icon={Clock}         label="In Progress"    value={inProgressTasks} color="#1E64FF" />
           <StatCard icon={CheckCircle2}  label="Completed"      value={completedTasks}  color="#10b981" />
           <StatCard icon={PhoneCall}     label="Help Requests"  value={pendingHelp}     color="#ef4444" />
+          <StatCard icon={Trophy}        label="Chill Out Tasks" value={pendingChill}   color="#8b5cf6" />
         </div>
 
         {/* ═══════════ TASKS ═══════════ */}
@@ -483,6 +518,83 @@ export default function MyTasksPage() {
                         <Clock size={12} /> Waiting for student
                       </span>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ═══════════ CHILL OUT ZONE ══════════════ */}
+        <section style={{ animation: 'fadeIn .65s ease' }} className="mt-8">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h2 className="text-base font-bold text-[#0A1628] flex items-center gap-2">
+              <Trophy size={17} className="text-violet-500" />
+              Chill Out Zone
+              {pendingChill > 0 && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-100">
+                  {pendingChill} Active
+                </span>
+              )}
+            </h2>
+            <button onClick={handleRefreshChill} disabled={chillRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500
+                bg-white border border-gray-200 rounded-lg hover:border-violet-300 hover:text-violet-600
+                transition cursor-pointer disabled:opacity-50">
+              <RefreshCw size={12} className={chillRefreshing ? 'animate-spin' : ''} />
+              {chillRefreshing ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+
+          {chillTasks.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-violet-50 flex items-center justify-center mx-auto mb-3">
+                <Trophy size={26} className="text-violet-300" />
+              </div>
+              <p className="text-sm text-gray-400">No active treasure hunt tasks right now.</p>
+              <p className="text-xs text-gray-300 mt-1">Students taking on chill out challenges will appear here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {chillTasks.map(task => {
+                const remMins = Math.floor(task.remainingSec / 60);
+                const remSecs = task.remainingSec % 60;
+                const timerStr = `${String(remMins).padStart(2,'0')}:${String(remSecs).padStart(2,'0')}`;
+                const urgent = task.remainingSec < 120;
+                return (
+                  <div key={task._id}
+                    className="bg-white rounded-xl border border-violet-100 shadow-[0_1px_8px_rgba(139,92,246,0.06)] p-4 flex flex-wrap items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                          <Trophy size={14} className="text-violet-600" />
+                        </div>
+                        <h3 className="text-sm font-bold text-[#0A1628]">{task.studentName}</h3>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100 flex items-center gap-1">
+                          <Timer size={10} />
+                          <span className={urgent ? 'text-red-500 font-bold' : ''}>{timerStr}</span>
+                        </span>
+                      </div>
+                      <div className="bg-violet-50 rounded-lg p-3 mb-2">
+                        <p className="text-xs text-gray-700 leading-relaxed">{task.questionText}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-[11px] text-gray-400">
+                        <span>{task.studentEmail}</span>
+                        <span>Started {new Date(task.startTime).toLocaleTimeString('en-IN', { timeStyle: 'short' })}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleVerifyHunt(task._id)}
+                      disabled={verifying === task._id}
+                      className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white
+                        bg-gradient-to-r from-violet-500 to-purple-700 rounded-lg hover:opacity-90
+                        transition disabled:opacity-60 cursor-pointer shadow-md shadow-violet-200"
+                    >
+                      {verifying === task._id
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <PackageCheck size={12} />}
+                      Verify &amp; Accept
+                    </button>
                   </div>
                 );
               })}

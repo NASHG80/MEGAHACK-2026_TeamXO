@@ -3,15 +3,68 @@ const EventTeam = require('../models/EventTeam');
 
 /* ────────────────────────────────────────────────────────────────────────────
    GET /api/organizer/events/:id
-   Fetch the full state of the hackathon (workspaces, teams)
+   Fetch workspaces + teams (EventTeam seed data + real shortlisted teams)
 ──────────────────────────────────────────────────────────────────────────── */
 const getEventData = async (req, res) => {
   try {
     const hackId = req.params.id;
-    const workspaces = await EventWorkspace.find({ hackathonId: hackId });
-    const teams = await EventTeam.find({ hackathonId: hackId });
 
-    res.json({ workspaces, teams });
+    // 1. Workspaces — stored by hackathonId (which is the slug or any string used at creation time)
+    const workspaces = await EventWorkspace.find({ hackathonId: hackId });
+
+    // 2. Seed teams (EventTeam collection — from manual seed)
+    const seedTeams = await EventTeam.find({ hackathonId: hackId });
+
+    // 3. Real shortlisted teams from Registration model (the actual hackathon flow)
+    let realTeams = [];
+    try {
+      const Hackathon    = require('../models/Hackathon');
+      const Registration = require('../models/Registration');
+      const mongoose     = require('mongoose');
+
+      // Resolve hackathon — try by slug first, then by ObjectId
+      let hackathon = null;
+      if (mongoose.Types.ObjectId.isValid(hackId)) {
+        hackathon = await Hackathon.findById(hackId).select('_id slug title');
+      }
+      if (!hackathon) {
+        hackathon = await Hackathon.findOne({ slug: hackId }).select('_id slug title');
+      }
+
+      if (hackathon) {
+        const regs = await Registration.find({
+          hackathon: hackathon._id,
+          shortlisted: true,
+        }).select('teamName leaderName college teamMembers');
+
+        realTeams = regs.map((r) => ({
+          hackathonId: hackId,
+          teamId:      `REG-${r._id}`,   // stable unique id from the registration
+          name:        r.teamName || 'Unknown Team',
+          college:     r.college || 'N/A',
+          members:     (r.teamMembers?.length || 0) + 1, // +1 for leader
+          entered:     false,
+          entryTime:   null,
+          memberNames: [r.leaderName, ...(r.teamMembers || []).map(m => m.name)].filter(Boolean),
+          memberStatus: {},
+        }));
+      }
+    } catch (regErr) {
+      // Registration model may not exist or query may fail — silently skip
+      console.warn('[getEventData] Could not load registrations:', regErr.message);
+    }
+
+    // 4. Merge: prefer seed teams if they exist, otherwise use real teams
+    //    De-duplicate by teamId
+    const allTeams = [...seedTeams];
+    const existingIds = new Set(seedTeams.map(t => t.teamId));
+    for (const rt of realTeams) {
+      if (!existingIds.has(rt.teamId)) {
+        allTeams.push(rt);
+      }
+    }
+
+    res.json({ workspaces, teams: allTeams });
   } catch (err) {
     console.error('[getEventData]', err);
     res.status(500).json({ message: 'Server error retrieving event data' });

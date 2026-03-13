@@ -396,7 +396,6 @@ function ShortlistPane({ subs, showToast, hackathonId }) {
 /* ─── MAIN PAGE ─── */
 export default function PptReview() {
   const { id: hackathonIdParam } = useParams();
-  const hackathonId = hackathonIdParam || 'HF-001';
 
   const [sbOpen, setSbOpen]   = useState(true);
   const [tab, setTab]         = useState('submissions');
@@ -406,29 +405,50 @@ export default function PptReview() {
   const [notes, setNotes]     = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Fetch only this organizer's registrations (scoped by backend to their hackathons)
+  // Fetch organizer's hackathon list + resolve active hackathon
+  const [hackathons,       setHackathons]       = useState([]);
+  const [activeHackathon,  setActiveHackathon]  = useState(null); // { _id, slug, title }
+
   useEffect(() => {
     const token = localStorage.getItem('hf_token');
-    fetch('http://localhost:5000/api/registrations/my-registrations', {
+    fetch('http://localhost:5000/api/organizer/hackathons', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
       .then(data => {
-        if (data.success) {
-          const all = data.data || [];
-          // If a specific hackathon is selected from the URL, filter to it only
-          const filtered = hackathonIdParam
-            ? all.filter(s => {
-                const hId = s.hackathon?._id || s.hackathon;
-                return String(hId) === String(hackathonIdParam);
-              })
-            : all;
-          setSubs(filtered);
+        const list = data.data || [];
+        setHackathons(list);
+        if (list.length > 0) {
+          if (hackathonIdParam) {
+            // URL param — match by _id or slug
+            const match = list.find(h => h._id === hackathonIdParam || h.slug === hackathonIdParam) || list[0];
+            setActiveHackathon(match);
+          } else {
+            const storedId = localStorage.getItem('hf_active_hackathon') || '';
+            const match = list.find(h => h._id === storedId) || list[0];
+            setActiveHackathon(match);
+          }
         }
+      })
+      .catch(console.error);
+  }, [hackathonIdParam]);
+
+  // Fetch registrations scoped to the active hackathon
+  useEffect(() => {
+    if (!activeHackathon) return;
+    setLoading(true);
+    const token = localStorage.getItem('hf_token');
+    fetch(`http://localhost:5000/api/organizer/hackathons/${activeHackathon.slug}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setSubs(data.participants || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [hackathonIdParam]);
+  }, [activeHackathon]);
+
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
   const slCount  = subs.filter(s => s.shortlisted).length;
@@ -485,13 +505,30 @@ export default function PptReview() {
             <div className="bg-white px-6 py-5 flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <h1 className="text-2xl font-extrabold text-dark tracking-tight">PPT Review Panel</h1>
-                <p className="text-sm text-gray-400 mt-1">AI-evaluated submissions · review scores and shortlist top teams</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  {activeHackathon ? <span className="font-semibold text-royal">{activeHackathon.title}</span> : 'AI-evaluated submissions'}
+                  {' '}· review scores and shortlist top teams
+                </p>
               </div>
-              {slCount > 0 && (
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full self-center">
-                  {slCount} team{slCount !== 1 ? 's' : ''} shortlisted
-                </span>
-              )}
+              <div className="flex items-center gap-3 flex-wrap self-center">
+                {hackathons.length > 1 && (
+                  <select
+                    value={activeHackathon?.slug || ''}
+                    onChange={e => {
+                      const h = hackathons.find(x => x.slug === e.target.value);
+                      if (h) setActiveHackathon(h);
+                    }}
+                    className="text-xs font-bold text-dark bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-royal/20"
+                  >
+                    {hackathons.map(h => <option key={h._id} value={h.slug}>{h.title}</option>)}
+                  </select>
+                )}
+                {slCount > 0 && (
+                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+                    {slCount} team{slCount !== 1 ? 's' : ''} shortlisted
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -548,7 +585,7 @@ export default function PptReview() {
               </div>
             ) : (
               <div className="p-6">
-                <ShortlistPane subs={subs} showToast={showToast} hackathonId={hackathonIdParam} />
+                <ShortlistPane subs={subs} showToast={showToast} hackathonId={activeHackathon?.slug || activeHackathon?._id} />
               </div>
             )}
           </div>

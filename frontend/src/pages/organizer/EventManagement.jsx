@@ -334,7 +334,7 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       .map(w => {
         const taken = occupiedSlots(w);
         const free = Array.from({ length: w.workstations }, (_, i) => i).filter(i => !taken.has(i));
-        return { id: w.id, number: w.number, floor: w.floor, freeSlots: free };
+        return { id: w.workspaceId, number: w.number, floor: w.floor, freeSlots: free };
       })
       .filter(w => w.freeSlots.length > 0)
       .sort((a, b) => b.freeSlots.length - a.freeSlots.length);
@@ -398,9 +398,18 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
 
   /* ---- open assign form ---- */
   const openAssignForm = (wsId) => {
-    setAssigningId(wsId);
+    const ws = workspaces.find(w => w.workspaceId === wsId);
+    const occupied = ws ? occupiedSlots(ws) : new Set();
+    // Auto-pick the first free slot so user doesn't need to click chips
+    const firstFreeSlot = ws
+      ? Array.from({ length: ws.workstations }, (_, i) => i).find(i => !occupied.has(i))
+      : undefined;
     const def = unassignedTeams[0];
-    setAssignForm({ teamId: def?.teamId || '', selectedSlots: new Set() });
+    setAssigningId(wsId);
+    setAssignForm({
+      teamId: def?.teamId || '',
+      selectedSlots: firstFreeSlot !== undefined ? new Set([firstFreeSlot]) : new Set(),
+    });
   };
 
   /* ---- toggle a WS chip (radio — only 1 per assignment) ---- */
@@ -417,11 +426,22 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
 
   /* ---- assign ---- */
   const handleAssign = async (wsId) => {
-    const { teamId, selectedSlots } = assignForm;
-    if (!teamId || selectedSlots.size === 0) return;
+    const { teamId } = assignForm;
+    if (!teamId) return;
     const team = teams.find(t => t.teamId === teamId);
-    const ws = workspaces.find(w => w.workspaceId === wsId);
-    const slots = [...selectedSlots].sort((a, b) => a - b);
+    const ws   = workspaces.find(w => w.workspaceId === wsId);
+
+    // Use manually selected slots, or auto-pick the first free one
+    let slots = [...(assignForm.selectedSlots || new Set())].sort((a, b) => a - b);
+    if (slots.length === 0 && ws) {
+      const occupied = occupiedSlots(ws);
+      const free = Array.from({ length: ws.workstations }, (_, i) => i).find(i => !occupied.has(i));
+      if (free !== undefined) slots = [free];
+    }
+    if (slots.length === 0) {
+      showToast('No free workstation slots available in this workspace');
+      return;
+    }
 
     const token = localStorage.getItem('hf_token');
 
@@ -437,7 +457,7 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
             wsId,
             teamId: team.teamId,
             teamName: team.name,
-            college: team.college,
+            college: team.college || '',
             slots
           }]
         })
@@ -445,9 +465,12 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
       if (res.ok) {
         const data = await res.json();
         setWorkspaces(data.workspaces);
-        showToast(`${team.name} assigned to ${ws.number}`);
+        showToast(`${team.name} assigned to ${ws?.number || wsId}`);
         setAssigningId(null);
         setAssignForm({});
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.message || 'Error assigning team');
       }
     } catch (err) {
       console.error(err);
@@ -742,7 +765,11 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
                   <div style={{ marginBottom: '10px' }}>
                     <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Select Team</label>
                     <select value={assignForm.teamId || ''}
-                      onChange={e => setAssignForm(f => ({ ...f, teamId: e.target.value, selectedSlots: new Set() }))}
+                      onChange={e => {
+                        // When team changes, auto-pick first free slot again
+                        const freeSlot = Array.from({ length: ws.workstations }, (_, i) => i).find(i => !occupied.has(i));
+                        setAssignForm(f => ({ ...f, teamId: e.target.value, selectedSlots: freeSlot !== undefined ? new Set([freeSlot]) : new Set() }));
+                      }}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', background: '#fff', cursor: 'pointer', outline: 'none' }}>
                       <option value="">Select team...</option>
                       {pickable.map(t => <option key={t.teamId} value={t.teamId}>{t.name} · {t.college}</option>)}
@@ -750,13 +777,17 @@ function WorkspaceSection({ workspaces, setWorkspaces, teams, showToast, hackId 
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '10px' }}>
                     {assignForm.selectedSlots?.size > 0
-                      ? <span style={{ color: '#16a34a', fontWeight: 700 }}>{assignForm.selectedSlots.size} workstation{assignForm.selectedSlots.size !== 1 ? 's' : ''} selected</span>
-                      : <span style={{ color: '#f59e0b' }}>Click chips above to select workstations</span>}
+                      ? <span style={{ color: '#16a34a', fontWeight: 700 }}>
+                          ✓ Will assign to WS-{String([...assignForm.selectedSlots][0] + 1).padStart(2,'0')} — or click a chip above to change
+                        </span>
+                      : avail > 0
+                        ? <span style={{ color: '#f59e0b' }}>Will auto-pick the next free workstation</span>
+                        : <span style={{ color: '#ef4444' }}>No free workstations available</span>}
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => handleAssign(ws.workspaceId)}
-                      disabled={!assignForm.teamId || !assignForm.selectedSlots?.size}
-                      style={{ flex: 1, padding: '8px 12px', borderRadius: '9px', background: assignForm.teamId && assignForm.selectedSlots?.size ? 'linear-gradient(135deg,#1E64FF,#4D8EFF)' : '#e2e8f0', color: assignForm.teamId && assignForm.selectedSlots?.size ? '#fff' : '#94a3b8', border: 'none', fontSize: '13px', fontWeight: 700, cursor: assignForm.teamId && assignForm.selectedSlots?.size ? 'pointer' : 'not-allowed' }}>Assign</button>
+                      disabled={!assignForm.teamId || avail === 0}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '9px', background: assignForm.teamId && avail > 0 ? 'linear-gradient(135deg,#1E64FF,#4D8EFF)' : '#e2e8f0', color: assignForm.teamId && avail > 0 ? '#fff' : '#94a3b8', border: 'none', fontSize: '13px', fontWeight: 700, cursor: assignForm.teamId && avail > 0 ? 'pointer' : 'not-allowed' }}>Assign</button>
                     <button onClick={() => { setAssigningId(null); setAssignForm({}); }}
                       style={{ padding: '8px 12px', borderRadius: '9px', background: '#f1f5f9', color: '#64748b', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
                   </div>

@@ -22,4 +22,8 @@ router.delete('/tasks/:id',             protect, ctrl.deleteTask);
 router.post  ('/join',                  protect, ctrl.joinHackathon);
 router.put   ('/help-requests/:id/resolve', protect, ctrl.resolveHelpRequest);
 
+// ── Chill Out Zone / Gamification (CoComm member) ──────────────────
+router.get   ('/gamification/pending',     protect, ctrl.getPendingTreasureHunts);
+router.put   ('/gamification/:id/verify',  protect, ctrl.verifyTreasureHunt);
+
 module.exports = router;
