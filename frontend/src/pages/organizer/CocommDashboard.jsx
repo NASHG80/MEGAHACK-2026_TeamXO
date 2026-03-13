@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Copy, RefreshCw, Users, ClipboardList, PlusCircle, CheckCircle2,
   AlertTriangle, Clock, Zap, X, ChevronDown, ArrowUpRight,
-  MapPin, Flag, Calendar, Trash2, LogOut,
+  MapPin, Flag, Calendar, Trash2, LogOut, Gift, Timer, Trophy, Loader2,
 } from 'lucide-react';
 import OrganizerSidebar from '../../components/OrganizerSidebar';
 
@@ -177,9 +177,62 @@ export default function CocomManagementDashboard() {
   const [showModal,  setShowModal]  = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  /* ── Chill Zone / Treasure Hunt ── */
+  const [huntTasks,    setHuntTasks]    = useState([]);
+  const [huntLoading,  setHuntLoading]  = useState(true);
+  const [approving,    setApproving]    = useState(null); // task _id being approved
+  const [huntTimers,   setHuntTimers]   = useState({});  // { taskId: secondsRemaining }
+
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const [hackathonId, setHackathonId] = useState(null);
+
+  /* ── Fetch pending treasure hunts (called on mount + every 10s) ── */
+  const fetchHunts = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch(`${API}/gamification/pending`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHuntTasks(data.tasks || []);
+        // Initialise timers for any new tasks
+        setHuntTimers(prev => {
+          const next = { ...prev };
+          (data.tasks || []).forEach(t => {
+            if (!(t._id in next)) next[t._id] = t.remainingSec ?? 0;
+          });
+          return next;
+        });
+      }
+    } catch (_) { /* silent */ } finally {
+      setHuntLoading(false);
+    }
+  }, []);
+
+  /* Approve a single challenge */
+  const approveHunt = async (taskId) => {
+    setApproving(taskId);
+    try {
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch(`${API}/gamification/${taskId}/verify`, {
+        method: 'PUT',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`✅ Approved! Reward: ${data.goodiesReward}`);
+        setHuntTasks(prev => prev.filter(t => t._id !== taskId));
+      } else {
+        showToast(data.message || 'Approval failed');
+      }
+    } catch (_) {
+      showToast('Network error — please retry');
+    } finally {
+      setApproving(null);
+    }
+  };
 
   /* ── Fetch initial data ── */
   useEffect(() => {
@@ -211,7 +264,34 @@ export default function CocomManagementDashboard() {
       }
     };
     load();
+    fetchHunts();
+  }, [fetchHunts]);
+
+  /* Poll for new treasure-hunt submissions every 10 s */
+  useEffect(() => {
+    const id = setInterval(fetchHunts, 10000);
+    return () => clearInterval(id);
+  }, [fetchHunts]);
+
+  /* Count-down existing timers locally every second */
+  useEffect(() => {
+    const id = setInterval(() => {
+      setHuntTimers(prev => {
+        const next = {};
+        for (const [k, v] of Object.entries(prev)) {
+          next[k] = Math.max(0, v - 1);
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
   }, []);
+
+  const fmtTimer = (sec) => {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   /* ── Generate Code ── */
   const generateCode = async () => {
@@ -543,6 +623,99 @@ export default function CocomManagementDashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── Chill Zone Challenges ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)] overflow-hidden mt-5">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-sm font-bold text-[#0A1628] flex items-center gap-2">
+                  <Gift size={14} className="text-violet-500" /> Chill Zone Challenges
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">Students waiting for your verification — click Approve to reward them</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {huntTasks.length > 0 && (
+                  <span className="text-xs font-bold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-full border border-violet-100">
+                    {huntTasks.length} pending
+                  </span>
+                )}
+                <button
+                  onClick={fetchHunts}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshCw size={13} />
+                </button>
+              </div>
+            </div>
+
+            {huntLoading ? (
+              <div className="px-6 py-10 flex items-center justify-center gap-2 text-sm text-gray-400">
+                <Loader2 size={16} className="animate-spin" /> Loading challenges…
+              </div>
+            ) : huntTasks.length === 0 ? (
+              <div className="px-6 py-12 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center mx-auto mb-3">
+                  <Trophy size={22} className="text-violet-300" />
+                </div>
+                <p className="text-gray-500 font-semibold text-sm">No pending challenges</p>
+                <p className="text-xs text-gray-400 mt-1">Students who start a Chill Zone challenge will appear here</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {huntTasks.map(task => {
+                  const secsLeft = huntTimers[task._id] ?? task.remainingSec ?? 0;
+                  const isLow    = secsLeft < 60;
+                  const isApproving = approving === task._id;
+                  return (
+                    <div key={task._id} className="px-6 py-4 flex items-start gap-4 hover:bg-violet-50/30 transition-colors">
+                      {/* Avatar */}
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                        style={{ background: `hsl(${task.studentName?.charCodeAt(0) * 47 % 360},55%,55%)` }}
+                      >
+                        {task.studentName?.charAt(0)?.toUpperCase()}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <p className="text-sm font-bold text-[#0A1628]">{task.studentName}</p>
+                          <span className="text-[10px] text-gray-400">{task.studentEmail}</span>
+                        </div>
+                        <p className="text-xs text-gray-600 leading-relaxed mb-2">{task.questionText}</p>
+                        {/* Timer */}
+                        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                          secsLeft === 0
+                            ? 'bg-red-100 text-red-600'
+                            : isLow
+                              ? 'bg-amber-50 text-amber-600'
+                              : 'bg-violet-50 text-violet-600'
+                        }`}>
+                          <Timer size={11} />
+                          {secsLeft === 0 ? 'Expired' : `${fmtTimer(secsLeft)} left`}
+                        </div>
+                      </div>
+
+                      {/* Approve button */}
+                      <button
+                        onClick={() => approveHunt(task._id)}
+                        disabled={isApproving || secsLeft === 0}
+                        className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white
+                          bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl shadow-sm shadow-violet-200
+                          hover:shadow-md hover:from-violet-600 hover:to-purple-700 transition-all
+                          cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        {isApproving
+                          ? <><Loader2 size={12} className="animate-spin" /> Approving…</>
+                          : <><CheckCircle2 size={12} /> Approve</>}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
