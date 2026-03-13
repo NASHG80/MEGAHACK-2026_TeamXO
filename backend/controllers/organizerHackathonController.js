@@ -4,14 +4,8 @@ const Participant  = require('../models/Participant');
 /* ── GET organizer's own hackathons list ───────────────── */
 const getMyHackathons = async (req, res) => {
   try {
-    // Return all hackathons created by this organizer user
+    // Strictly return only hackathons created by this organizer — no fallback
     const list = await Hackathon.find({ createdBy: req.user.id }).sort({ createdAt: -1 });
-    // If none with createdBy (legacy data), fall back to all hackathons
-    // matching the organizer's name
-    if (list.length === 0) {
-      const byName = await Hackathon.find({}).sort({ createdAt: -1 });
-      return res.json({ success: true, data: byName });
-    }
     res.json({ success: true, data: list });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
