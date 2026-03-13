@@ -7,6 +7,7 @@ const {
   getAllRegistrations,
   getMyRegistrations,
   checkRegistration,
+  getMyShortlistStatus,
   shortlistRegistration,
   deleteRegistration,
   rescoreRegistration,
@@ -33,6 +34,9 @@ router.post('/shortlist/:id', shortlistRegistration);
 
 // GET — organizer's own registrations only (scoped to their hackathons)
 router.get('/my-registrations', protect, getMyRegistrations);
+
+// GET — student's own shortlist + publish status across all hackathons they registered for
+router.get('/my-shortlist-status', protect, getMyShortlistStatus);
 
 // GET — all registrations across all hackathons (admin use only)
 router.get('/all', getAllRegistrations);

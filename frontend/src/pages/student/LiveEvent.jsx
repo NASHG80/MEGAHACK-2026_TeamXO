@@ -175,24 +175,17 @@ export default function LiveEvent() {
     setFeedbackSubmitting(false);
   };
 
-  /* Fetch live event data + real hackathon name on mount */
+
+  /* Fetch live event data + shortlist status on mount */
   useEffect(() => {
     (async () => {
       try {
-        // Decode student email from JWT stored in localStorage
         const token = localStorage.getItem('hf_token');
-        let studentEmail = null;
-        if (token) {
-          try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            studentEmail = payload.email || payload.leaderEmail || null;
-          } catch { /* ignore */ }
-        }
 
-        // Fetch live event + latest hackathon in parallel
-        const [eventRes, hackRes] = await Promise.allSettled([
+        // Fetch live event data + student's shortlist status in parallel
+        const [eventRes, statusRes] = await Promise.allSettled([
           fetch(`${API_BASE}/me`, { headers: getHeaders() }),
-          fetch('http://localhost:5000/api/hackathons/latest'),
+          fetch('http://localhost:5000/api/registrations/my-shortlist-status', { headers: getHeaders() }),
         ]);
 
         let merged = { ...FALLBACK_EVENT };
@@ -202,52 +195,84 @@ export default function LiveEvent() {
           merged = { ...merged, ...data };
         }
 
-        let hackId = null;
-        let resultsPublished = false;
-        if (hackRes.status === 'fulfilled' && hackRes.value.ok) {
-          const hack = await hackRes.value.json();
-          if (hack.title)         merged.hackathonName  = hack.title;
-          if (hack.organizerName) merged.organizerName  = hack.organizerName;
-          hackId = hack._id || hack.id || null;
-          resultsPublished = hack.resultsPublished === true;
+        // ── ACCESS GATE via my-shortlist-status ─────────────────────
+        let grantedViaStatus = false;
+        if (statusRes.status === 'fulfilled' && statusRes.value.ok) {
+          const statusData = await statusRes.value.json();
+          if (statusData.success) {
+            if (!statusData.published) {
+              // Results not published for any hackathon this student joined
+              setAccessState('not_published');
+              setLoading(false);
+              return;
+            }
+            if (statusData.shortlisted) {
+              // Shortlisted + published → grant access
+              if (statusData.hackathon?.title) merged.hackathonName = statusData.hackathon.title;
+              if (statusData.registration?.teamName) merged.teamName = statusData.registration.teamName;
+              setAccessState('granted');
+              grantedViaStatus = true;
+            } else {
+              // Published but not shortlisted
+              setAccessState('not_shortlisted');
+              setLoading(false);
+              return;
+            }
+          }
         }
 
-        setEvent(merged);
-
-        // ── ACCESS GATE ─────────────────────────────────────────────
-        if (!resultsPublished) {
-          setAccessState('not_published');
-          setLoading(false);
-          return;
-        }
-
-        // Results are published — check if this student's team is shortlisted
-        if (hackId && studentEmail) {
+        // Fallback: if the status endpoint wasn't available (no token / network error),
+        // try the old hackathons/latest approach
+        if (!grantedViaStatus) {
+          let studentEmail = null;
           try {
-            const checkRes = await fetch(
-              `http://localhost:5000/api/registrations/check/${hackId}/${encodeURIComponent(studentEmail)}`
-            );
-            if (checkRes.ok) {
-              const checkData = await checkRes.json();
-              if (checkData.registered && checkData.data?.shortlisted) {
-                setAccessState('granted');
-              } else {
-                setAccessState('not_shortlisted');
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            studentEmail = payload.email || payload.leaderEmail || null;
+          } catch { /* ignore */ }
+
+          try {
+            const hackRes = await fetch('http://localhost:5000/api/hackathons/latest');
+            if (hackRes.ok) {
+              const hack = await hackRes.json();
+              if (hack.title)         merged.hackathonName = hack.title;
+              if (hack.organizerName) merged.organizerName = hack.organizerName;
+              const hackId = hack._id || hack.id || null;
+              const resultsPublished = hack.resultsPublished === true;
+
+              if (!resultsPublished) {
+                setAccessState('not_published');
                 setLoading(false);
                 return;
               }
+              if (hackId && studentEmail) {
+                const checkRes = await fetch(
+                  `http://localhost:5000/api/registrations/check/${hackId}/${encodeURIComponent(studentEmail)}`
+                );
+                if (checkRes.ok) {
+                  const checkData = await checkRes.json();
+                  if (checkData.registered && checkData.data?.shortlisted) {
+                    setAccessState('granted');
+                  } else {
+                    setAccessState('not_shortlisted');
+                    setLoading(false);
+                    return;
+                  }
+                } else {
+                  setAccessState('granted');
+                }
+              } else {
+                setAccessState('granted');
+              }
             } else {
-              // Can't verify — grant access (fail-open for demo)
-              setAccessState('granted');
+              setAccessState('granted'); // fail-open
             }
           } catch {
             setAccessState('granted'); // fail-open
           }
-        } else {
-          // No hackId or email available — grant access
-          setAccessState('granted');
         }
-        // ────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────
+
+        setEvent(merged);
 
         // Auto-assign workspace if not yet assigned
         if (!merged.workspaceNumber) {
