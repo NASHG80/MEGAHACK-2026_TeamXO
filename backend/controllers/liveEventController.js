@@ -24,60 +24,51 @@ exports.getMyLiveEvent = async (req, res) => {
     }
 
     // ── Look up the organizer-assigned workspace from EventWorkspace ──────
-    // The organizer assigns teams in EventManagement → stored in EventWorkspace.assignedTeams
-    // TeamId format used there: "REG-{registration._id}"
+    // EventWorkspace.hackathonId = slug string (not ObjectId), so we skip
+    // hackathon filtering and query directly by the globally-unique teamId.
     let workspaceNumber   = event.workspaceNumber;
     let workspaceLocation = event.workspaceLocation;
 
     try {
-      const hackathonId = event.hackathon._id;
-      const hackSlug    = event.hackathon.slug || hackathonId.toString();
-
-      // Find the student's registration to get the REG-{id} teamId
+      const hackathonId  = event.hackathon._id;
       const studentEmail = event.student.email;
+
+      // 1. Find the student's registration → derive their REG-{id} teamId
       const reg = await Registration.findOne({
         hackathon: hackathonId,
         $or: [
-          { leaderEmail:          studentEmail },
-          { 'teamMembers.email':  studentEmail },
+          { leaderEmail:         studentEmail },
+          { 'teamMembers.email': studentEmail },
         ],
       }).select('_id').lean();
 
       if (reg) {
         const teamId = `REG-${reg._id}`;
 
-        // Search all workspaces for this hackathon (by id or slug)
-        const allWorkspaces = await EventWorkspace.find({
-          $or: [
-            { hackathonId: hackathonId.toString() },
-            { hackathonId: hackSlug },
-          ],
+        // 2. Find the workspace this team is assigned to — query by teamId directly
+        //    (EventWorkspace.hackathonId is a slug string; avoid that mismatch entirely)
+        const ws = await EventWorkspace.findOne({
+          'assignedTeams.teamId': teamId,
         }).lean();
 
-        for (const ws of allWorkspaces) {
-          const assignment = ws.assignedTeams?.find(t => t.teamId === teamId);
-          if (assignment) {
-            // Format: "Lab 1" + slot badges like "WS-01"
-            const slotLabel = assignment.slots?.length
-              ? assignment.slots.map(s => `WS-${String(s + 1).padStart(2, '0')}`).join(', ')
-              : '';
-            workspaceNumber   = slotLabel ? `${ws.number} · ${slotLabel}` : ws.number;
-            workspaceLocation = `${ws.floor}${ws.note ? ' · ' + ws.note : ''}`;
+        if (ws) {
+          const assignment = ws.assignedTeams.find(t => t.teamId === teamId);
+          const slotLabel  = assignment?.slots?.length
+            ? assignment.slots.map(s => `WS-${String(s + 1).padStart(2, '0')}`).join(', ')
+            : '';
+          workspaceNumber   = slotLabel ? `${ws.number} · ${slotLabel}` : ws.number;
+          workspaceLocation = ws.floor + (ws.note ? ` · ${ws.note}` : '');
 
-            // Persist back to LiveEvent so /self-scan can return it too
-            if (workspaceNumber !== event.workspaceNumber || workspaceLocation !== event.workspaceLocation) {
-              await LiveEvent.updateOne(
-                { _id: event._id },
-                { $set: { workspaceNumber, workspaceLocation } }
-              );
-            }
-            break;
-          }
+          // 3. Always persist back to LiveEvent so non-API paths (e.g. fallback FALLBACK_EVENT) also update
+          await LiveEvent.updateOne(
+            { _id: event._id },
+            { $set: { workspaceNumber, workspaceLocation } }
+          );
         }
       }
     } catch (wsErr) {
-      console.warn('[getMyLiveEvent] Could not resolve EventWorkspace:', wsErr.message);
-      // Fall through — use whatever is already in the LiveEvent document
+      console.warn('[getMyLiveEvent] Could not resolve workspace:', wsErr.message);
+      // Non-fatal — student still gets whatever is in LiveEvent
     }
 
     res.json({
