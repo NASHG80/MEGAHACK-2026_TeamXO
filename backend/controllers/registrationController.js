@@ -2,6 +2,7 @@ const Registration = require('../models/Registration');
 const Hackathon = require('../models/Hackathon');
 const path = require('path');
 const { extractResumeText, getAIScore } = require('../services/ai_service/resume_extractor');
+const sendEmail = require('../utils/sendEmail');
 
 /* ─────────────────────────────────────────────────────────────
    POST /api/registrations/
@@ -140,6 +141,31 @@ const getAllRegistrations = async (req, res) => {
 };
 
 /* ─────────────────────────────────────────────────────────────
+   GET /api/registrations/my-registrations
+   Returns ONLY registrations for hackathons the logged-in organizer owns.
+   Requires auth middleware so req.user.id is available.
+───────────────────────────────────────────────────────────── */
+const getMyRegistrations = async (req, res) => {
+  try {
+    // Find all hackathon IDs owned by this organizer
+    const myHackathons = await Hackathon.find({ createdBy: req.user.id }).select('_id');
+    const hackathonIds = myHackathons.map(h => h._id);
+
+    if (!hackathonIds.length) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    const registrations = await Registration
+      .find({ hackathon: { $in: hackathonIds } })
+      .sort({ aiScore: -1, createdAt: -1 });
+
+    res.status(200).json({ success: true, count: registrations.length, data: registrations });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────
    GET /api/registrations/check/:hackathonId/:email
    Returns whether an email is already registered for a hackathon.
 ───────────────────────────────────────────────────────────── */
@@ -207,4 +233,103 @@ const deleteRegistration = async (req, res) => {
   }
 };
 
-module.exports = { registerTeam, registerWithResume, getRegistrations, getAllRegistrations, checkRegistration, shortlistRegistration, deleteRegistration, rescoreRegistration };
+/* ─────────────────────────────────────────────────────────────
+   POST /api/registrations/send-emails/:hackathonId
+   Sends HTML confirmation emails to all shortlisted teams.
+───────────────────────────────────────────────────────────── */
+const sendShortlistEmails = async (req, res) => {
+  try {
+    const { hackathonId } = req.params;
+
+    // Fetch shortlisted registrations + hackathon name in parallel
+    const [shortlisted, hackathon] = await Promise.all([
+      Registration.find({ hackathon: hackathonId, shortlisted: true }),
+      Hackathon.findById(hackathonId).select('title organizerContact'),
+    ]);
+
+    if (!shortlisted.length) {
+      return res.status(400).json({ success: false, message: 'No shortlisted teams found.' });
+    }
+
+    const hackathonName = hackathon?.title || 'the Hackathon';
+
+    // Build and send each email
+    await Promise.all(
+      shortlisted.map(reg => {
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9fafb;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+            <div style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);padding:32px 24px;text-align:center">
+              <h1 style="color:#fff;margin:0;font-size:24px;font-weight:900">🎉 Congratulations!</h1>
+              <p style="color:#bfdbfe;margin:8px 0 0;font-size:14px">You've been shortlisted!</p>
+            </div>
+            <div style="padding:32px 24px;background:#fff">
+              <p style="font-size:15px;color:#374151;margin:0 0 16px">Dear <strong>${reg.leaderName}</strong>,</p>
+              <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:0 0 16px">
+                We are thrilled to inform you that your team <strong>&ldquo;${reg.teamName}&rdquo;</strong> has been
+                <strong>shortlisted</strong> to participate in the <strong>Offline Round</strong> of
+                <strong>${hackathonName}</strong>!
+              </p>
+              <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:0 0 16px">
+                Your presentation score stood out among all submissions, and we can't wait to see your project in action.
+              </p>
+              <div style="background:#f0f9ff;border-left:4px solid #3b82f6;border-radius:8px;padding:16px 20px;margin:20px 0">
+                <p style="font-weight:700;color:#1e40af;margin:0 0 10px;font-size:13px">📋 WHAT'S NEXT</p>
+                <ul style="margin:0;padding-left:18px;color:#374151;font-size:13px;line-height:2">
+                  <li>Watch your email for venue details and the full schedule closer to the event date.</li>
+                  <li>Ensure all your team members are available on the event day.</li>
+                  <li>Bring a valid ID and this email as your entry confirmation.</li>
+                  <li>Log in to the HackFlow portal to access your Live Event dashboard on event day.</li>
+                </ul>
+              </div>
+              <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:16px 0 0">
+                If you have any questions, feel free to reply to this email or reach us at
+                <a href="mailto:hackflow453@gmail.com" style="color:#3b82f6">hackflow453@gmail.com</a>.
+              </p>
+              <p style="font-size:14px;color:#4b5563;margin:24px 0 0">See you at the event! 🚀</p>
+              <p style="font-size:14px;color:#374151;margin:4px 0 0"><strong>Warm regards,</strong><br/>The HackFlow Team</p>
+            </div>
+            <div style="background:#f3f4f6;padding:16px 24px;text-align:center">
+              <p style="font-size:11px;color:#9ca3af;margin:0">This email was sent by HackFlow · hackflow453@gmail.com</p>
+            </div>
+          </div>
+        `;
+        return sendEmail(
+          reg.leaderEmail,
+          `🎉 Shortlisted! – ${hackathonName} Offline Round`,
+          html,
+        );
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Confirmation emails sent to ${shortlisted.length} team${shortlisted.length > 1 ? 's' : ''}.`,
+      count: shortlisted.length,
+    });
+  } catch (error) {
+    console.error('[sendShortlistEmails]', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────
+   POST /api/registrations/publish/:hackathonId
+   Marks hackathon results as published (unlocks LiveEvent for students).
+───────────────────────────────────────────────────────────── */
+const publishResults = async (req, res) => {
+  try {
+    const hackathon = await Hackathon.findByIdAndUpdate(
+      req.params.hackathonId,
+      { resultsPublished: true },
+      { new: true }
+    );
+    if (!hackathon) {
+      return res.status(404).json({ success: false, message: 'Hackathon not found.' });
+    }
+    res.status(200).json({ success: true, message: 'Results published! Shortlisted students can now access the Live Event page.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { registerTeam, registerWithResume, getRegistrations, getAllRegistrations, getMyRegistrations, checkRegistration, shortlistRegistration, deleteRegistration, rescoreRegistration, sendShortlistEmails, publishResults };

@@ -56,6 +56,7 @@ const hackathonSchema = new mongoose.Schema(
     organizerContact: { type: String, required: true },
     whatsappLink: { type: String, default: '' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    resultsPublished: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

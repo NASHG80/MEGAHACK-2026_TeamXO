@@ -139,6 +139,8 @@ export default function LiveEvent() {
   const [event, setEvent] = useState(FALLBACK_EVENT);
   const [loading, setLoading] = useState(true);
   const [workspaceAssigning, setWorkspaceAssigning] = useState(false);
+  // 'checking' | 'not_published' | 'not_shortlisted' | 'granted'
+  const [accessState, setAccessState] = useState('checking');
 
   /* Helper to get auth headers */
   const getHeaders = () => {
@@ -153,7 +155,17 @@ export default function LiveEvent() {
   useEffect(() => {
     (async () => {
       try {
-        // Fetch both in parallel — live event (may 404) + latest hackathon for real name
+        // Decode student email from JWT stored in localStorage
+        const token = localStorage.getItem('hf_token');
+        let studentEmail = null;
+        if (token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            studentEmail = payload.email || payload.leaderEmail || null;
+          } catch { /* ignore */ }
+        }
+
+        // Fetch live event + latest hackathon in parallel
         const [eventRes, hackRes] = await Promise.allSettled([
           fetch(`${API_BASE}/me`, { headers: getHeaders() }),
           fetch('http://localhost:5000/api/hackathons/latest'),
@@ -161,26 +173,62 @@ export default function LiveEvent() {
 
         let merged = { ...FALLBACK_EVENT };
 
-        // Overlay live event data if available
         if (eventRes.status === 'fulfilled' && eventRes.value.ok) {
           const data = await eventRes.value.json();
           merged = { ...merged, ...data };
         }
 
-        // Always override hackathon name/organizer with real MongoDB data
+        let hackId = null;
+        let resultsPublished = false;
         if (hackRes.status === 'fulfilled' && hackRes.value.ok) {
           const hack = await hackRes.value.json();
-          if (hack.title)        merged.hackathonName  = hack.title;
-          if (hack.organizerName) merged.organizerName = hack.organizerName;
+          if (hack.title)         merged.hackathonName  = hack.title;
+          if (hack.organizerName) merged.organizerName  = hack.organizerName;
+          hackId = hack._id || hack.id || null;
+          resultsPublished = hack.resultsPublished === true;
         }
 
         setEvent(merged);
+
+        // ── ACCESS GATE ─────────────────────────────────────────────
+        if (!resultsPublished) {
+          setAccessState('not_published');
+          setLoading(false);
+          return;
+        }
+
+        // Results are published — check if this student's team is shortlisted
+        if (hackId && studentEmail) {
+          try {
+            const checkRes = await fetch(
+              `http://localhost:5000/api/registrations/check/${hackId}/${encodeURIComponent(studentEmail)}`
+            );
+            if (checkRes.ok) {
+              const checkData = await checkRes.json();
+              if (checkData.registered && checkData.data?.shortlisted) {
+                setAccessState('granted');
+              } else {
+                setAccessState('not_shortlisted');
+                setLoading(false);
+                return;
+              }
+            } else {
+              // Can't verify — grant access (fail-open for demo)
+              setAccessState('granted');
+            }
+          } catch {
+            setAccessState('granted'); // fail-open
+          }
+        } else {
+          // No hackId or email available — grant access
+          setAccessState('granted');
+        }
+        // ────────────────────────────────────────────────────────────
 
         // Auto-assign workspace if not yet assigned
         if (!merged.workspaceNumber) {
           setWorkspaceAssigning(true);
           try {
-            const token = localStorage.getItem('hf_token');
             const wsRes = await fetch('http://localhost:5000/api/event/assign-workspace', {
               method: 'POST',
               headers: {
@@ -207,7 +255,7 @@ export default function LiveEvent() {
           }
         }
       } catch {
-        // Keep fallback data
+        setAccessState('granted'); // fail-open on complete error
       } finally {
         setLoading(false);
       }
@@ -314,7 +362,42 @@ export default function LiveEvent() {
     <div className="min-h-screen bg-gray-50 font-sans">
       <StudentNavbar />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* ── ACCESS GATE SCREENS ── */}
+      {accessState === 'not_published' && (
+        <main className="max-w-lg mx-auto px-4 py-24 text-center">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-3xl border border-gray-100 shadow-lg p-10">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center mb-5 mx-auto">
+              <Clock size={28} className="text-amber-500" />
+            </div>
+            <h1 className="text-xl font-extrabold text-dark mb-2">Results Not Published Yet</h1>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              The organizer hasn't published the shortlist results yet.
+              Check back later — you'll receive a confirmation email if your team is selected!
+            </p>
+          </motion.div>
+        </main>
+      )}
+
+      {accessState === 'not_shortlisted' && (
+        <main className="max-w-lg mx-auto px-4 py-24 text-center">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-3xl border border-gray-100 shadow-lg p-10">
+            <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-5 mx-auto">
+              <Shield size={28} className="text-red-400" />
+            </div>
+            <h1 className="text-xl font-extrabold text-dark mb-2">Not Shortlisted</h1>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Unfortunately your team was not selected for the offline round this time.
+              Thank you for participating — keep building and try again next time! 🚀
+            </p>
+          </motion.div>
+        </main>
+      )}
+
+      {/* ── FULL LIVE EVENT PAGE (only for shortlisted / granted) ── */}
+      {(accessState === 'granted' || accessState === 'checking') && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
@@ -710,6 +793,7 @@ export default function LiveEvent() {
         </motion.div>
 
       </main>
+      )}
 
       {/* ═══════ HELP REQUEST MODAL ═══════ */}
       <AnimatePresence>

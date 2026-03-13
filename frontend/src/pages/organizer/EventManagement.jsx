@@ -910,15 +910,8 @@ export default function EventManagement() {
   const [teams, setTeams] = useState([]);
   const [hackathon, setHackathon] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [resolvedSlug, setResolvedSlug] = useState(null); // actual slug used for event API
+  const [resolvedSlug, setResolvedSlug] = useState(null);
   const [toast, setToast] = useState(null);
-  const [timeline, setTimeline] = useState(() => computeTimeline(nowMinutes()));
-
-  useEffect(() => {
-    setTimeline(computeTimeline(nowMinutes()));
-    const iv = setInterval(() => setTimeline(computeTimeline(nowMinutes())), 30_000);
-    return () => clearInterval(iv);
-  }, []);
 
   async function loadHackathon(slug) {
     const token = localStorage.getItem('hf_token');
@@ -1007,10 +1000,10 @@ export default function EventManagement() {
 
   const effectiveId = resolvedSlug || hackathonSlug || 'N/A';
 
-  // Use custom DB timeline if the organizer has set one, otherwise fall back to hardcoded
+  // Use DB timeline if the organizer has set one — otherwise show blank (no fallback)
   const displayTimeline = (hackathon?.timeline?.length > 0)
     ? convertDbTimeline(hackathon.timeline)
-    : timeline; // fallback: auto-computed from TIMELINE_DEF
+    : [];
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>

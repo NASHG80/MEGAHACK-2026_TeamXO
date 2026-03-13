@@ -266,7 +266,11 @@ function SubmissionsPane({ subs, setSubs, showToast, selected, setSelected, onTo
 }
 
 /* ─── SHORTLIST PANE ─── */
-function ShortlistPane({ subs, showToast }) {
+function ShortlistPane({ subs, showToast, hackathonId }) {
+  const [sending, setSending]         = useState(false);
+  const [published, setPublished]     = useState(false);
+  const [publishing, setPublishing]   = useState(false);
+
   const sl = subs.filter(s => s.shortlisted).sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0));
 
   if (!sl.length) return (
@@ -279,6 +283,51 @@ function ShortlistPane({ subs, showToast }) {
     </div>
   );
 
+  const handleSendEmails = async () => {
+    if (!hackathonId) { showToast('No hackathon selected'); return; }
+    setSending(true);
+    try {
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch(`http://localhost:5000/api/registrations/send-emails/${hackathonId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`✉️ ${data.message}`);
+      } else {
+        showToast(`Failed: ${data.message}`);
+      }
+    } catch {
+      showToast('Email sending failed — check your connection');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!hackathonId) { showToast('No hackathon selected'); return; }
+    setPublishing(true);
+    try {
+      const token = localStorage.getItem('hf_token');
+      const res = await fetch(`http://localhost:5000/api/registrations/publish/${hackathonId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPublished(true);
+        showToast('🎉 Results published! Students can now access Live Event.');
+      } else {
+        showToast(`Failed: ${data.message}`);
+      }
+    } catch {
+      showToast('Publish failed — check your connection');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
@@ -286,9 +335,13 @@ function ShortlistPane({ subs, showToast }) {
           <h2 className="font-extrabold text-slate-800">{sl.length} team{sl.length !== 1 ? 's' : ''} shortlisted</h2>
           <p className="text-xs text-slate-400 mt-0.5">Send confirmation emails to notify selected teams</p>
         </div>
-        <button onClick={() => showToast('Confirmation emails sent!')}
-          className="px-4 py-2.5 text-sm font-bold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 transition-colors shadow-sm shadow-emerald-200 cursor-pointer flex items-center gap-2">
-          <Mail size={13} /> Send Confirmation Emails
+        <button
+          onClick={handleSendEmails}
+          disabled={sending}
+          className="px-4 py-2.5 text-sm font-bold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm shadow-emerald-200 cursor-pointer flex items-center gap-2">
+          {sending
+            ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Sending…</>
+            : <><Mail size={13} /> Send Confirmation Emails</>}
         </button>
       </div>
 
@@ -314,18 +367,31 @@ function ShortlistPane({ subs, showToast }) {
       <div className="bg-gradient-to-br from-blue-600 to-violet-600 rounded-2xl p-6 text-white">
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h3 className="font-extrabold text-base mb-1">Ready to publish results?</h3>
-            <p className="text-sm text-white/70">Make shortlist visible on the public hackathon page. This cannot be undone.</p>
+            <h3 className="font-extrabold text-base mb-1">
+              {published ? '✅ Results Published' : 'Ready to publish results?'}
+            </h3>
+            <p className="text-sm text-white/70">
+              {published
+                ? 'Shortlisted students can now access the Live Event page.'
+                : 'Make shortlist visible to students — unlocks their Live Event page. This cannot be undone.'}
+            </p>
           </div>
-          <button onClick={() => showToast('Results published!')}
-            className="px-5 py-2.5 text-sm font-bold bg-white text-blue-700 rounded-xl hover:bg-blue-50 transition-colors shadow-lg cursor-pointer flex items-center gap-2 shrink-0 whitespace-nowrap">
-            <CheckCircle2 size={14} /> Publish Results
-          </button>
+          {!published && (
+            <button
+              onClick={handlePublish}
+              disabled={publishing}
+              className="px-5 py-2.5 text-sm font-bold bg-white text-blue-700 rounded-xl hover:bg-blue-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-lg cursor-pointer flex items-center gap-2 shrink-0 whitespace-nowrap">
+              {publishing
+                ? <><span className="w-3.5 h-3.5 border-2 border-blue-300 border-t-blue-700 rounded-full animate-spin" />Publishing…</>
+                : <><CheckCircle2 size={14} /> Publish Results</>}
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 /* ─── MAIN PAGE ─── */
 export default function PptReview() {
@@ -340,22 +406,29 @@ export default function PptReview() {
   const [notes, setNotes]     = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Fetch real registrations from backend
+  // Fetch only this organizer's registrations (scoped by backend to their hackathons)
   useEffect(() => {
     const token = localStorage.getItem('hf_token');
-    const url = hackathonIdParam
-      ? `http://localhost:5000/api/registrations/${hackathonIdParam}`
-      : `http://localhost:5000/api/registrations/all`;
-    fetch(url, {
+    fetch('http://localhost:5000/api/registrations/my-registrations', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
       .then(data => {
-        if (data.success) setSubs(data.data || []);
+        if (data.success) {
+          const all = data.data || [];
+          // If a specific hackathon is selected from the URL, filter to it only
+          const filtered = hackathonIdParam
+            ? all.filter(s => {
+                const hId = s.hackathon?._id || s.hackathon;
+                return String(hId) === String(hackathonIdParam);
+              })
+            : all;
+          setSubs(filtered);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [hackathonId]);
+  }, [hackathonIdParam]);
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
   const slCount  = subs.filter(s => s.shortlisted).length;
@@ -475,7 +548,7 @@ export default function PptReview() {
               </div>
             ) : (
               <div className="p-6">
-                <ShortlistPane subs={subs} setSubs={setSubs} showToast={showToast} />
+                <ShortlistPane subs={subs} showToast={showToast} hackathonId={hackathonIdParam} />
               </div>
             )}
           </div>
