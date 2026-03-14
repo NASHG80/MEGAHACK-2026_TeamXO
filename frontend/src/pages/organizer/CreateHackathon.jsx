@@ -451,7 +451,6 @@ export default function CreateHackathon() {
         },
       });
 
-      alert('Hackathon created successfully!');
       navigate('/organizer-dashboard');
     } catch (err) {
       console.error(err);
